@@ -86,6 +86,11 @@ input[type=text], input[type=password], input[type=number] {
 input:focus { outline: none; border-color: var(--accent); }
 input[type=range] { width: 100%; margin-top: 8px; accent-color: var(--accent); }
 .sep { border: none; border-top: 1px solid var(--line); margin: 18px 0 16px; }
+.warn-note {
+  border: 1px solid #4a3a1c; background: #241d10; color: #e8cfa0;
+  border-radius: 8px; padding: 9px 12px; margin: 8px 0 14px; line-height: 1.55;
+}
+.warn-note b { color: var(--warn); }
 select {
   width: 100%; margin-top: 5px; padding: 9px 11px;
   background: var(--bg); color: var(--text);

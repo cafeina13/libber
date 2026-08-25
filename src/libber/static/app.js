@@ -482,9 +482,12 @@ document.querySelectorAll("[data-copy]").forEach((btn) => {
 $("folder-btn").onclick = () => api("/api/open-folder", { method: "POST" }).catch(() => {});
 
 $("settings-btn").onclick = () => $("settings-panel").classList.remove("hidden");
-$("settings-close").onclick = async () => {
+$("set-cookies").addEventListener("change", () => saveSettings(true));
+
+async function saveSettings(stayOpen) {
+  let result;
   try {
-    await api("/api/settings", {
+    result = await api("/api/settings", {
       method: "POST",
       body: {
         output_dir: $("set-output").value,
@@ -502,8 +505,22 @@ $("settings-close").onclick = async () => {
     alert(err.message);
     return;
   }
-  $("settings-panel").classList.add("hidden");
-};
+
+  // Whether the chosen browser can actually be read, reported straight away
+  // rather than surfacing as a failed download later.
+  const check = result && result.cookie_check;
+  const el = $("cookie-check");
+  if (check && check.configured) {
+    banner(el, check.message, check.ok ? "ok" : "error");
+    el.classList.add("small");
+  } else {
+    banner(el, "");
+  }
+
+  if (!stayOpen) $("settings-panel").classList.add("hidden");
+}
+
+$("settings-close").onclick = () => saveSettings(false);
 $("set-threshold").addEventListener("input", (e) => { $("thr-value").textContent = e.target.value; });
 $("set-sleep").addEventListener("input", (e) => { $("sleep-value").textContent = `${e.target.value}s`; });
 $("settings-panel").addEventListener("click", (e) => {

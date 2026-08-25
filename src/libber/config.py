@@ -71,6 +71,50 @@ PERSISTED = ("output_dir", "concurrency", "match_threshold", "skip_low_matches",
              "enrich_youtube", "cookies_browser", "cookies_profile", "sleep_between")
 
 
+def probe_cookies(settings: Settings) -> dict:
+    """Actually try reading the configured browser's cookies.
+
+    Guessing which browsers work is a losing game: Chromium-based browsers on
+    Windows encrypt their cookie store with App-Bound Encryption, which yt-dlp
+    cannot decrypt, while Firefox and its forks are fine. Rather than maintain
+    a matrix of platform and browser, read them and report what happened.
+    """
+    spec = cookie_option(settings)
+    if not spec:
+        return {"configured": False, "ok": False, "message": "No cookies configured."}
+
+    from yt_dlp.cookies import extract_cookies_from_browser
+
+    try:
+        jar = extract_cookies_from_browser(*spec)
+    except Exception as exc:
+        detail = str(exc).splitlines()[0]
+        if "DPAPI" in detail or "decrypt" in detail.lower():
+            detail = (
+                "This browser encrypts its cookies in a way yt-dlp can't read "
+                "on Windows (Chrome 127+ App-Bound Encryption). Firefox, Zen, "
+                "LibreWolf and Waterfox work."
+            )
+        elif "could not find" in detail.lower() or "not find" in detail.lower():
+            detail = "No cookie store found — is that browser profile right?"
+        return {"configured": True, "ok": False, "message": detail[:200]}
+
+    youtube = sum(1 for c in jar if "youtube" in (c.domain or ""))
+    signed_in = any(c.name == "LOGIN_INFO" and "youtube" in (c.domain or "") for c in jar)
+    if not youtube:
+        return {
+            "configured": True, "ok": False,
+            "message": "Cookies read, but none for YouTube — visit youtube.com "
+                       "in that browser first.",
+        }
+    return {
+        "configured": True, "ok": True, "signed_in": signed_in,
+        "message": f"Read {youtube} YouTube cookies"
+                   + (" from a signed-in session." if signed_in
+                      else " (signed out — safer, and often enough)."),
+    }
+
+
 def cookie_option(settings: Settings) -> tuple | None:
     """yt-dlp's `cookiesfrombrowser` tuple, or None when unconfigured."""
     if not settings.cookies_browser:

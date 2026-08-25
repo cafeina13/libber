@@ -226,6 +226,41 @@ mismatches are refused outright. **No album beats the wrong album.**
 
 Turn it off in Settings if you'd rather keep YouTube's own metadata.
 
+## When YouTube blocks you
+
+Past a few hundred downloads YouTube starts answering with *"Sign in to confirm
+you're not a bot"*. It applies to the whole connection, not one video, so
+everything fails at once. Sometimes it goes further and refuses to serve any
+audio format even after the check passes — that shows up as *"The page needs to
+be reloaded"*.
+
+Two things help, both in Settings:
+
+- **Pause between downloads**, and fewer in parallel. Downloading a long
+  playlist flat out is what triggers it. A second or two between tracks and two
+  at a time is far less likely to get flagged than five back-to-back.
+- **Cookies from a browser**, which get past the check. Installed browsers are
+  detected for you. Firefox forks (Zen, LibreWolf, Waterfox) work too — yt-dlp
+  only knows the name `firefox`, so libber supplies the profile path alongside
+  it.
+
+If you're already blocked, neither fixes it retroactively. Wait a few hours.
+
+> ### Use a spare Google account for cookies
+>
+> Cookies from a signed-in browser attach every download to that Google
+> account, and Google restricts accounts it judges to be automating downloads.
+> A blocked IP clears by itself; a suspended Google account takes your mail,
+> drive and everything else attached to it.
+>
+> Prefer a browser profile with no Google login — the check often passes on
+> cookies alone, and then the worst case is a temporary IP block. If you do use
+> a signed-in profile, make it one you can afford to lose.
+>
+> libber reads cookies locally through yt-dlp and sends them only to YouTube.
+> It never stores or logs them: `settings.json` holds the browser name and
+> profile path, nothing more. The feature is off unless you turn it on.
+
 ## Tests
 
 ```

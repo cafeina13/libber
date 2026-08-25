@@ -26,6 +26,7 @@ from .config import (
     REDIRECT_PATH,
     Settings,
     load_settings,
+    probe_cookies,
     redirect_uri,
     save_credentials,
     save_settings,
@@ -149,15 +150,22 @@ def detect_browsers() -> list[dict[str, str]]:
     local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData/Local")
 
     found: list[dict[str, str]] = []
+    # Chrome 127+ encrypts its cookie store with App-Bound Encryption, which
+    # yt-dlp cannot decrypt on Windows -- so every Chromium browser is a dead
+    # end there. They are still listed, marked, rather than hidden: on Linux
+    # and macOS they work fine.
+    chromium_broken = sys.platform == "win32"
     for name, root in (
         ("chrome", local / "Google/Chrome/User Data"),
         ("edge", local / "Microsoft/Edge/User Data"),
         ("brave", local / "BraveSoftware/Brave-Browser/User Data"),
         ("vivaldi", local / "Vivaldi/User Data"),
         ("chromium", local / "Chromium/User Data"),
+        ("opera", appdata / "Opera Software/Opera Stable"),
     ):
         if root.exists():
-            found.append({"browser": name, "profile": "", "label": name})
+            label = f"{name} — encrypted, unreadable on Windows" if chromium_broken else name
+            found.append({"browser": name, "profile": "", "label": label})
 
     # Firefox and its forks: locate the profile holding cookies.sqlite.
     for label, root in (
@@ -216,7 +224,11 @@ async def update_settings(body: SettingsBody) -> dict[str, Any]:
     if body.sleep_between is not None:
         settings.sleep_between = max(0.0, min(30.0, body.sleep_between))
     save_settings(settings)   # survive a restart; losing output_dir is costly
-    return await status()
+    payload = await status()
+    # Report immediately whether the chosen browser can actually be read --
+    # otherwise the first sign of trouble is a failed download much later.
+    payload["cookie_check"] = await asyncio.to_thread(probe_cookies, settings)
+    return payload
 
 
 @app.post("/api/open-folder")

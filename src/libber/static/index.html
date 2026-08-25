@@ -162,10 +162,20 @@
     <label>Take cookies from
       <select id="set-cookies"></select>
     </label>
+    <div id="cookie-check" class="banner small hidden"></div>
     <p class="muted small">
       YouTube answers anonymous requests with &ldquo;sign in to confirm you&rsquo;re not
-      a bot&rdquo;. Cookies from a browser you&rsquo;re signed into on this machine get
-      past that. They&rsquo;re read locally and never sent anywhere but YouTube.
+      a bot&rdquo;. Cookies from a browser you&rsquo;re signed into get past that. They
+      are read locally and go nowhere but YouTube &mdash; libber never stores or
+      logs them, only the browser name and profile path above.
+    </p>
+    <p class="warn-note small">
+      <b>Use a spare Google account for this.</b> Cookies from a signed-in
+      browser attach every download to that account, and Google restricts
+      accounts it decides are automating downloads. A blocked IP clears in a few
+      hours; a suspended Google account takes your mail and everything else with
+      it. Signed out, or a browser profile with no Google login, is safest &mdash;
+      you may still get past the check, and you risk nothing but the IP.
     </p>
     <label>Pause between downloads <span id="sleep-value" class="muted"></span>
       <input id="set-sleep" type="range" min="0" max="10" step="0.5">

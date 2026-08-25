@@ -9,11 +9,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from libber import config
-from libber.config import Settings, cookie_option, load_settings, save_settings
+from libber.config import (
+    Settings,
+    cookie_option,
+    load_settings,
+    probe_cookies,
+    save_settings,
+)
 
 
 @pytest.fixture
@@ -102,6 +109,76 @@ class TestCookieOption:
         s = load_settings()
         assert cookie_option(s) == ("firefox", zen)
         assert s.sleep_between == 2.5
+
+
+class TestProbeCookies:
+    """Which browsers work is not guessable -- Chromium on Windows encrypts its
+    cookie store in a way yt-dlp can't read, Firefox forks are fine, and a fork
+    needs an explicit profile. So the browser is read and the result reported,
+    rather than a platform/browser matrix being maintained by hand.
+    """
+
+    def _fake_jar(self, monkeypatch, cookies=None, error=None):
+        def fake(*spec):
+            if error:
+                raise RuntimeError(error)
+            return cookies or []
+
+        monkeypatch.setattr("yt_dlp.cookies.extract_cookies_from_browser", fake)
+
+    def _cookie(self, name, domain=".youtube.com"):
+        return SimpleNamespace(name=name, domain=domain)
+
+    def test_unconfigured_is_reported_not_probed(self):
+        result = probe_cookies(Settings())
+        assert result["configured"] is False
+        assert result["ok"] is False
+
+    def test_success_counts_youtube_cookies(self, monkeypatch):
+        self._fake_jar(monkeypatch, [self._cookie("SID"), self._cookie("PREF"),
+                                     self._cookie("other", ".example.com")])
+        result = probe_cookies(Settings(cookies_browser="firefox"))
+        assert result["ok"] is True
+        assert "2 YouTube cookies" in result["message"]
+
+    def test_signed_in_session_is_called_out(self, monkeypatch):
+        self._fake_jar(monkeypatch, [self._cookie("LOGIN_INFO"), self._cookie("SID")])
+        result = probe_cookies(Settings(cookies_browser="firefox"))
+        assert result["signed_in"] is True
+        assert "signed-in" in result["message"]
+
+    def test_signed_out_is_noted_as_safer(self, monkeypatch):
+        self._fake_jar(monkeypatch, [self._cookie("PREF")])
+        result = probe_cookies(Settings(cookies_browser="firefox"))
+        assert result["ok"] is True
+        assert result["signed_in"] is False
+        assert "safer" in result["message"]
+
+    def test_no_youtube_cookies_is_not_success(self, monkeypatch):
+        self._fake_jar(monkeypatch, [self._cookie("x", ".example.com")])
+        result = probe_cookies(Settings(cookies_browser="firefox"))
+        assert result["ok"] is False
+        assert "visit youtube.com" in result["message"]
+
+    def test_chromium_encryption_gets_a_plain_explanation(self, monkeypatch):
+        self._fake_jar(monkeypatch, error="Failed to decrypt with DPAPI. See issue 10927")
+        result = probe_cookies(Settings(cookies_browser="edge"))
+        assert result["ok"] is False
+        assert "App-Bound Encryption" in result["message"]
+        assert "Firefox" in result["message"]        # says what does work
+
+    def test_missing_profile_is_explained(self, monkeypatch):
+        self._fake_jar(monkeypatch, error="could not find firefox cookies database")
+        result = probe_cookies(Settings(cookies_browser="firefox",
+                                        cookies_profile="/nope"))
+        assert result["ok"] is False
+        assert "profile" in result["message"]
+
+    def test_unknown_failure_is_passed_through(self, monkeypatch):
+        self._fake_jar(monkeypatch, error="something else entirely went wrong")
+        result = probe_cookies(Settings(cookies_browser="firefox"))
+        assert result["ok"] is False
+        assert "something else entirely" in result["message"]
 
 
 class TestResilience:
