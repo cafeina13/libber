@@ -363,8 +363,19 @@ class Job:
         if chosen is None:
             return False
         self.library.forget(track_id, delete_file=True)
-        pool.submit(self._download, task, [chosen])
+        pool.submit(self._retry_worker, task, chosen)
         return True
+
+    def _retry_worker(self, task: Task, candidate: Candidate) -> None:
+        """A retry lands after the job already finished, so it has to do the
+        bookkeeping _finish would otherwise have done -- without it the new
+        file is absent from both the state file and the playlist."""
+        self._download(task, [candidate])
+        self.library.save()
+        try:
+            write_m3u(self.folder, self.playlist, self.library)
+        except OSError as exc:
+            self.emit("warning", {"message": f"Couldn't update the .m3u8: {exc}"})
 
 
 class JobManager:

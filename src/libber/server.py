@@ -346,8 +346,9 @@ async def job_events(job_id: str, request: Request) -> StreamingResponse:
                     yield ": keepalive\n\n"
                     continue
                 yield _sse(message)
-                if message.get("event") == "job":
-                    break
+                # Deliberately no break on the "job" event. Fixing a match
+                # happens after the job reports done, and closing here left
+                # those retries streaming to nobody.
         finally:
             job.unsubscribe(queue)
 

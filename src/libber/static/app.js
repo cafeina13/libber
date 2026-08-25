@@ -371,12 +371,19 @@ function togglePicker(row, task) {
     use.onclick = async () => {
       use.disabled = true;
       picker.remove();
+      // Show something immediately rather than waiting on the first event.
+      row.dataset.status = "downloading";
+      row.querySelector(".tstatus").textContent = "re-downloading…";
+      row.querySelector(".tfill").style.width = "0%";
+      if (!stream && jobId) listen(jobId);   // reconnect if the stream dropped
       try {
         await api(`/api/jobs/${jobId}/retry`, {
           method: "POST",
           body: { track_id: task.id, video_id: cand.video_id },
         });
       } catch (err) {
+        row.dataset.status = "error";
+        row.querySelector(".tstatus").textContent = err.message;
         banner($("job-banner"), err.message, "error");
       }
     };
@@ -401,7 +408,8 @@ function finishJob(data) {
   banner($("job-banner"), `${text}. Saved to ${data.folder}`, kind);
 
   $("cancel-btn").classList.add("hidden");
-  if (stream) { stream.close(); stream = null; }
+  // The stream stays open: "Fix match" re-downloads after the job has
+  // reported done, and those updates arrive on this same connection.
   updateDownloadButton();
 }
 

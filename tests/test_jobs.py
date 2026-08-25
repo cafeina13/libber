@@ -277,6 +277,56 @@ class TestDirectYouTubeTracks:
         assert not cand.risky
 
 
+class TestFixMatch:
+    """Choosing an alternative from the picker.
+
+    A retry always lands after the job has reported done, so it has to do the
+    bookkeeping the job's own finish step would have done. It didn't: the
+    download happened but was never saved and never reached the playlist file,
+    so it silently vanished on restart.
+    """
+
+    def _park_then_offer(self, make_job, playlist, monkeypatch, stub_download):
+        pl = playlist(1)
+        good = candidate(video_id="g" * 11, score=99.0)
+        risky = candidate(video_id="r" * 11, score=95.0, risky=True, flags=["live version"])
+        monkeypatch.setattr("libber.matcher.search", lambda t: [risky, good])
+        job = make_job(pl, match_threshold=90.0)
+        task = job.tasks[pl.tracks[0].id]
+        job._process(task)
+        assert task.status == REVIEW
+        return job, task
+
+    def test_downloads_the_chosen_candidate(self, make_job, playlist, monkeypatch,
+                                            stub_download):
+        job, task = self._park_then_offer(make_job, playlist, monkeypatch, stub_download)
+        job._retry_worker(task, next(c for c in task.candidates if c.video_id == "g" * 11))
+        assert task.status == DONE
+        assert stub_download[0][0] == "g" * 11
+
+    def test_result_survives_a_restart(self, make_job, playlist, monkeypatch,
+                                       stub_download, tmp_path):
+        job, task = self._park_then_offer(make_job, playlist, monkeypatch, stub_download)
+        job._retry_worker(task, task.candidates[1])
+        # A fresh Library reads from disk, so this fails unless save() ran.
+        assert Library(tmp_path).entry(task.track.id) is not None
+
+    def test_playlist_file_is_rewritten(self, make_job, playlist, monkeypatch,
+                                        stub_download):
+        job, task = self._park_then_offer(make_job, playlist, monkeypatch, stub_download)
+        job._retry_worker(task, task.candidates[1])
+        m3u = list(job.library.root.rglob("*.m3u8"))
+        assert m3u, "the fixed track never reached the playlist file"
+        assert task.path.name in m3u[0].read_text(encoding="utf-8")
+
+    def test_unknown_track_or_candidate_is_refused(self, make_job, playlist, monkeypatch,
+                                                   stub_download):
+        job, task = self._park_then_offer(make_job, playlist, monkeypatch, stub_download)
+        # Both bail out before the pool is touched, so None is safe to pass.
+        assert job.retry("nosuchtrack", "g" * 11, None) is False
+        assert job.retry(task.track.id, "nosuchvideo", None) is False
+
+
 class TestCancellation:
     def test_cancelled_job_stops_processing(self, make_job, playlist, stub_download):
         pl = playlist(1)
