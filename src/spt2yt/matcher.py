@@ -118,7 +118,7 @@ class Candidate:
             "artist": ", ".join(self.artists),
             "album": self.album,
             "duration_s": round(self.duration_s),
-            "score": round(self.score, 1),
+            "score": round(min(self.score, 100.0), 1),
             "flags": self.flags,
             "risky": self.risky,
             "url": self.url,
@@ -206,7 +206,11 @@ def score(track: Track, cand: Candidate) -> Candidate:
     if cand.duration_s and abs(delta) > 5:
         flags.append(f"{'longer' if delta > 0 else 'shorter'} by {abs(delta):.0f}s")
 
-    cand.score = max(0.0, min(100.0, total))
+    # Deliberately not capped at 100. A flawless title/artist/duration match
+    # already scores exactly 100, so capping here would swallow the album bonus
+    # and leave genuine alternatives tied -- which is the one case the bonus
+    # exists to settle. Ranking uses the true value; to_dict() caps for display.
+    cand.score = max(0.0, total)
     cand.flags = flags
     cand.risky = risky
     return cand

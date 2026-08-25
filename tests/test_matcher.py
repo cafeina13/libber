@@ -136,13 +136,25 @@ class TestScoring:
         assert result.risky
         assert any("karaoke" in f for f in result.flags)
 
-    def test_matching_album_is_a_small_bonus(self, track):
-        # Duration is deliberately a few seconds out: a flawless match already
-        # hits the 100 clamp, which would hide the bonus entirely.
+    def test_matching_album_breaks_a_tie_between_perfect_matches(self, track):
+        """The case the bonus exists for. A popular song returns several
+        candidates that are all flawless on title, artist and duration -- the
+        album is the only thing left to separate the named release from a
+        remaster or a compilation. Scores are therefore not capped at 100,
+        or these would tie and the order would come down to YouTube's."""
         t = track(title="Song", artists=["Artist"], album="The Album", duration_ms=200_000)
-        with_album = score(t, cand("Song", ["Artist"], 206, album="The Album"))
-        without = score(t, cand("Song", ["Artist"], 206, album="Other Record"))
+        with_album = score(t, cand("Song", ["Artist"], 200, album="The Album"))
+        without = score(t, cand("Song", ["Artist"], 200, album="Compilation Hits"))
+        assert without.score == 100.0
         assert with_album.score > without.score
+
+    def test_display_score_is_capped(self, track):
+        # Uncapped internally for ranking, capped in the payload so the UI
+        # never shows "105".
+        t = track(title="Song", artists=["Artist"], album="The Album", duration_ms=200_000)
+        best = score(t, cand("Song", ["Artist"], 200, album="The Album"))
+        assert best.score > 100.0
+        assert best.to_dict()["score"] == 100.0
 
     def test_video_results_rank_below_song_results(self, track):
         t = track(title="Song", artists=["Artist"], duration_ms=200_000)
@@ -150,16 +162,17 @@ class TestScoring:
         as_video = score(t, cand("Song", ["Artist"], 200, source="video"))
         assert as_video.score < as_song.score
 
-    def test_score_stays_in_range(self, track):
-        """Penalties stack, so clamping matters: a negative or >100 score would
-        break the threshold comparison."""
+    def test_stacked_penalties_never_go_negative(self, track):
+        """Penalties stack and can far exceed the base score; a negative result
+        would sort below nothing and read absurdly in the UI."""
         t = track(title="Song", artists=["Artist"], duration_ms=200_000)
         awful = score(
             t,
             cand("Completely Different (Live) (Remix) (Karaoke)", ["Nobody"], 9000,
                  album="Karaoke Live Remixes", source="video"),
         )
-        assert 0.0 <= awful.score <= 100.0
+        assert awful.score == 0.0
+        assert awful.to_dict()["score"] == 0.0
 
     def test_to_dict_exposes_what_the_ui_needs(self, track):
         t = track(title="Song", artists=["Artist"], duration_ms=200_000)
