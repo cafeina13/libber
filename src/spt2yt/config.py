@@ -43,6 +43,9 @@ class Settings:
     # downloaded silently. Tuned against live/remix/karaoke false positives.
     match_threshold: float = 70.0
     skip_low_matches: bool = True
+    # YouTube gives no album, date or ISRC and only 16:9 artwork. Look the
+    # recording up on Spotify (or YouTube Music) to fill those in.
+    enrich_youtube: bool = True
 
     @property
     def has_credentials(self) -> bool:

@@ -67,6 +67,7 @@ async function refreshStatus() {
   $("set-threshold").value = s.settings.match_threshold;
   $("thr-value").textContent = s.settings.match_threshold;
   $("set-skip").checked = s.settings.skip_low_matches;
+  $("set-enrich").checked = s.settings.enrich_youtube;
 
   const account = $("account");
   if (s.user) {
@@ -442,6 +443,7 @@ $("settings-close").onclick = async () => {
         concurrency: Number($("set-jobs").value),
         match_threshold: Number($("set-threshold").value),
         skip_low_matches: $("set-skip").checked,
+        enrich_youtube: $("set-enrich").checked,
       },
     });
     await refreshStatus();

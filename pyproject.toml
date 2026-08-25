@@ -24,3 +24,18 @@ spt2yt = "spt2yt.__main__:main"
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Network tests are opt-in: they hit YouTube and Spotify for real, so they are
+# slow and go red when a service changes something. Run them with --network.
+addopts = "-m 'not network' --strict-markers"
+markers = [
+    "network: hits a live service; needs --network to run",
+    "spotify: additionally needs Spotify credentials configured",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

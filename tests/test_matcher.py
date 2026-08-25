@@ -1,0 +1,168 @@
+"""Scoring rules that decide whether a download is the right recording.
+
+Each of these pins down a mistake the matcher actually made before it was
+fixed, so the comments name the failure rather than restating the assertion.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from spt2yt.matcher import Candidate, _duration_score, normalise, score, variants_in
+
+
+def cand(title, artists=("Test Artist",), duration_s=200.0, album="", source="song"):
+    return Candidate(
+        video_id="x" * 11,
+        title=title,
+        artists=list(artists),
+        album=album,
+        duration_s=duration_s,
+        source=source,
+    )
+
+
+class TestNormalise:
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("Bohemian Rhapsody - 2011 Remaster", "bohemian rhapsody"),
+            ("Song (Remastered 2009)", "song"),
+            ("Song (Deluxe Edition)", "song"),
+            ("Someone Like You (feat. Adele)", "someone like you"),
+            ("Track ft. Someone", "track"),
+            ("Plain Title", "plain title"),
+        ],
+    )
+    def test_strips_noise_that_means_the_same_recording(self, raw, expected):
+        assert normalise(raw) == expected
+
+    def test_keeps_words_that_change_the_recording(self):
+        # "Live" must survive normalisation or the variant check can't see it.
+        assert "live" in normalise("Karma Police (Live at Glastonbury)")
+
+
+class TestVariantDetection:
+    @pytest.mark.parametrize(
+        "title, expected",
+        [
+            ("Song (Live at Wembley)", "live"),
+            ("Song (Tiesto Remix)", "remix"),
+            ("Song - Karaoke Version", "karaoke"),
+            ("Song (Instrumental)", "karaoke"),
+            ("Song (Acoustic)", "acoustic"),
+            ("Song (sped up)", "edit"),
+            ("Song (slowed + reverb)", "edit"),
+            ("Song (Extended Mix)", "extended"),
+        ],
+    )
+    def test_flags_different_recordings(self, title, expected):
+        assert expected in variants_in(title)
+
+    def test_plain_title_has_no_variants(self):
+        assert variants_in("Just A Normal Song") == set()
+
+    def test_substring_does_not_false_positive(self):
+        # "live" inside "Delivery" must not read as a live recording.
+        assert "live" not in variants_in("Delivery Man")
+
+
+class TestDurationScore:
+    def test_exact_and_near_exact_score_full(self):
+        assert _duration_score(0) == 100.0
+        assert _duration_score(2) == 100.0
+
+    def test_decays_then_floors(self):
+        assert 0 < _duration_score(8) < 100
+        assert _duration_score(15) == 0.0
+        assert _duration_score(500) == 0.0  # floors rather than going negative
+
+    def test_symmetric(self):
+        assert _duration_score(7) == _duration_score(-7)
+
+
+class TestScoring:
+    def test_perfect_match_scores_top(self, track):
+        t = track(title="Chokehold", artists=["Sleep Token"], duration_ms=305_000)
+        result = score(t, cand("Chokehold", ["Sleep Token"], 305))
+        assert result.score >= 95
+        assert not result.risky
+        assert result.flags == []
+
+    def test_cover_by_another_artist_loses_to_the_original(self, track):
+        """The Pentatonix bug: a note-perfect cover title outranked Queen."""
+        t = track(title="Bohemian Rhapsody", artists=["Queen"], duration_ms=354_000)
+        original = score(t, cand("Bohemian Rhapsody", ["Queen"], 354))
+        cover = score(t, cand("Bohemian Rhapsody", ["Pentatonix"], 356))
+        assert cover.score < original.score
+        assert cover.risky
+        assert "different artist" in cover.flags
+
+    def test_excerpt_is_disqualified(self, track):
+        """The "Operatic Section" bug: a 64s excerpt won because the duration
+        score floors at zero, making 290s off look like 15s off."""
+        t = track(title="Bohemian Rhapsody", artists=["Queen"], duration_ms=354_000)
+        excerpt = score(t, cand("Bohemian Rhapsody (Operatic Section)", ["Queen"], 64))
+        full = score(t, cand("Bohemian Rhapsody", ["Queen"], 354))
+        assert excerpt.score < full.score
+        assert excerpt.risky
+
+    def test_full_album_upload_is_disqualified(self, track):
+        t = track(title="Chokehold", artists=["Sleep Token"], duration_ms=305_000)
+        result = score(t, cand("Take Me Back To Eden (Full Album)", ["Sleep Token"], 3600))
+        assert result.risky
+
+    def test_live_version_flagged_when_source_is_studio(self, track):
+        t = track(title="Karma Police", artists=["Radiohead"], duration_ms=264_000)
+        result = score(t, cand("Karma Police (Live at Glastonbury)", ["Radiohead"], 268))
+        assert result.risky
+        assert "live version" in result.flags
+
+    def test_live_source_is_not_penalised_for_being_live(self, track):
+        # Asking for a live track and getting one is a match, not a variant.
+        t = track(title="Karma Police (Live at Glastonbury)", artists=["Radiohead"],
+                  duration_ms=264_000)
+        result = score(t, cand("Karma Police (Live at Glastonbury)", ["Radiohead"], 264))
+        assert "live version" not in result.flags
+
+    def test_karaoke_hides_in_the_album_name(self, track):
+        """Karaoke pressings often have a clean track title and give themselves
+        away only in the album, so the album is scanned too."""
+        t = track(title="Bohemian Rhapsody", artists=["Queen"], duration_ms=354_000)
+        result = score(
+            t, cand("Bohemian Rhapsody", ["Zoom Karaoke"], 358,
+                    album="Zoom Karaoke - Seventies Hits")
+        )
+        assert result.risky
+        assert any("karaoke" in f for f in result.flags)
+
+    def test_matching_album_is_a_small_bonus(self, track):
+        # Duration is deliberately a few seconds out: a flawless match already
+        # hits the 100 clamp, which would hide the bonus entirely.
+        t = track(title="Song", artists=["Artist"], album="The Album", duration_ms=200_000)
+        with_album = score(t, cand("Song", ["Artist"], 206, album="The Album"))
+        without = score(t, cand("Song", ["Artist"], 206, album="Other Record"))
+        assert with_album.score > without.score
+
+    def test_video_results_rank_below_song_results(self, track):
+        t = track(title="Song", artists=["Artist"], duration_ms=200_000)
+        as_song = score(t, cand("Song", ["Artist"], 200, source="song"))
+        as_video = score(t, cand("Song", ["Artist"], 200, source="video"))
+        assert as_video.score < as_song.score
+
+    def test_score_stays_in_range(self, track):
+        """Penalties stack, so clamping matters: a negative or >100 score would
+        break the threshold comparison."""
+        t = track(title="Song", artists=["Artist"], duration_ms=200_000)
+        awful = score(
+            t,
+            cand("Completely Different (Live) (Remix) (Karaoke)", ["Nobody"], 9000,
+                 album="Karaoke Live Remixes", source="video"),
+        )
+        assert 0.0 <= awful.score <= 100.0
+
+    def test_to_dict_exposes_what_the_ui_needs(self, track):
+        t = track(title="Song", artists=["Artist"], duration_ms=200_000)
+        payload = score(t, cand("Song (Live)", ["Artist"], 200)).to_dict()
+        assert {"video_id", "title", "artist", "score", "flags", "risky", "url"} <= payload.keys()
+        assert payload["url"].startswith("https://music.youtube.com/watch?v=")

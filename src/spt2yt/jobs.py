@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import matcher
+from . import enrich, matcher
 from .config import Settings
 from .download import DownloadFailed, fetch_audio, target_path, write_tags
 from .library import Library, folder_for, write_m3u
@@ -78,12 +78,16 @@ class Job:
         settings: Settings,
         library: Library,
         loop: asyncio.AbstractEventLoop,
+        spotify: Any = None,
     ) -> None:
         self.id = uuid.uuid4().hex[:12]
         self.playlist = playlist
         self.settings = settings
         self.library = library
         self.loop = loop
+        # SpotifyAuth, used only to enrich YouTube-sourced tracks. Optional:
+        # the YouTube card works with no Spotify credentials at all.
+        self.spotify = spotify
         self.folder = folder_for(library.root, playlist)
         self.status = PENDING
         self.cancelled = threading.Event()
@@ -187,8 +191,10 @@ class Job:
             return
 
         # A direct YouTube source already names the recording, so there is
-        # nothing to search for and nothing to second-guess.
+        # nothing to search for and nothing to second-guess -- but it arrives
+        # without album, date or ISRC, so fill those in first.
         if task.track.video_id:
+            self._enrich(task)
             self._download(task, [_direct_candidate(task.track)])
             return
 
@@ -227,6 +233,31 @@ class Job:
                 return
 
         self._download(task, task.candidates[:3])
+
+    def _enrich(self, task: Task) -> None:
+        """Best-effort metadata lookup for a YouTube-sourced track.
+
+        Spotify first: it has album, date, ISRC and square cover art. Falling
+        back to YouTube Music's own fields, which need no credentials but carry
+        less. Either way a failure is silent -- the download still happens, just
+        with thinner tags.
+        """
+        if not self.settings.enrich_youtube or task.track.album:
+            return
+
+        task.status = MATCHING
+        task.message = "looking up album details"
+        self._push(task)
+
+        found = None
+        if self.spotify and self.spotify.settings.has_credentials:
+            try:
+                found = enrich.from_spotify(task.track, self.spotify.app_client())
+            except Exception:
+                found = None
+        if not found:
+            found = enrich.from_youtube(task.track)
+        task.message = f"album: {found}" if found else ""
 
     def _reserve_path(self, task: Task) -> Path:
         """Claim a free filename for this track.
@@ -344,9 +375,20 @@ class JobManager:
         )
         self.jobs: dict[str, Job] = {}
 
-    def create(self, playlist: Playlist, track_ids: Iterable[str], library: Library) -> Job:
+    def create(
+        self,
+        playlist: Playlist,
+        track_ids: Iterable[str],
+        library: Library,
+        spotify: Any = None,
+    ) -> Job:
         job = Job(
-            playlist, track_ids, self.settings, library, asyncio.get_running_loop()
+            playlist,
+            track_ids,
+            self.settings,
+            library,
+            asyncio.get_running_loop(),
+            spotify=spotify,
         )
         self.jobs[job.id] = job
         if len(self.jobs) > 20:  # keep memory bounded across a long session

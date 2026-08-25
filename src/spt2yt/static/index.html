@@ -145,6 +145,14 @@
       <input id="set-skip" type="checkbox">
       <span>Hold low-confidence matches for review instead of downloading them</span>
     </label>
+    <label class="checkline">
+      <input id="set-enrich" type="checkbox">
+      <span>Look up album details for YouTube downloads
+        <br><span class="muted small">Fills in album, release date, ISRC and square cover art
+        from Spotify, falling back to YouTube Music. Only confident matches are
+        applied &mdash; no album beats the wrong album.</span>
+      </span>
+    </label>
     <p class="muted small">
       Higher threshold = fewer wrong versions slip through, more tracks parked for
       review. 70 is a reasonable middle.

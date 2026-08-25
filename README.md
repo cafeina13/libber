@@ -206,6 +206,32 @@ video id.
 - Private, deleted and live entries are skipped and reported rather than
   failing the whole playlist.
 
+## Tests
+
+```
+uv run pytest              # offline only -- fast, no network, no credentials
+uv run pytest --network    # also hits YouTube and Spotify for real
+```
+
+The default run is pure logic: match scoring, URL parsing, filename sanitising,
+library state and enrichment decisions. It needs nothing configured and takes
+under a second, so there's no excuse not to run it.
+
+`--network` adds tests that call the live services. They're opt-in because they
+are slow, they go red whenever a provider changes a response shape, and one of
+them downloads audio (a Creative Commons track, deliberately). Anything needing
+Spotify credentials is additionally marked `spotify` and skips itself when none
+are configured:
+
+```
+uv run pytest --network -m "network and not spotify"
+```
+
+Most of the matcher tests exist because the matcher got it wrong first — a cover
+outranking the original, a 64-second excerpt beating the full song, a karaoke
+pressing hiding behind a clean track title. The comments name the failure, so
+the tests read as a record of what actually goes wrong when matching music.
+
 ## Notes
 
 - Downloads are for personal use. Respect the rights of whoever made the music.

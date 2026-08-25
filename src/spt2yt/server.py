@@ -95,6 +95,7 @@ class SettingsBody(BaseModel):
     concurrency: int | None = None
     match_threshold: float | None = None
     skip_low_matches: bool | None = None
+    enrich_youtube: bool | None = None
 
 
 # --------------------------------------------------------------------------
@@ -118,6 +119,7 @@ async def status() -> dict[str, Any]:
             "concurrency": settings.concurrency,
             "match_threshold": settings.match_threshold,
             "skip_low_matches": settings.skip_low_matches,
+            "enrich_youtube": settings.enrich_youtube,
         },
     }
 
@@ -149,6 +151,8 @@ async def update_settings(body: SettingsBody) -> dict[str, Any]:
         settings.match_threshold = max(0.0, min(100.0, body.match_threshold))
     if body.skip_low_matches is not None:
         settings.skip_low_matches = body.skip_low_matches
+    if body.enrich_youtube is not None:
+        settings.enrich_youtube = body.enrich_youtube
     return await status()
 
 
@@ -283,7 +287,7 @@ async def create_job(body: JobBody) -> dict[str, Any]:
     if not track_ids:
         raise HTTPException(400, "No tracks selected.")
 
-    job = state.jobs.create(playlist, track_ids, state.library())
+    job = state.jobs.create(playlist, track_ids, state.library(), spotify=state.auth)
     job.start(state.jobs.pool)
     return {"job_id": job.id, "snapshot": job.snapshot()}
 
