@@ -195,8 +195,14 @@ function renderPlaylist(data) {
     row.dataset.id = track.id;
     row.querySelector(".tnum").textContent = i + 1;
     row.querySelector(".tart").src = track.cover_url || "";
-    row.querySelector(".ttitle").textContent = track.title;
-    row.querySelector(".tartist").textContent = `${track.artist} · ${mmss(track.duration_ms)}`;
+    const titleEl = row.querySelector(".ttitle");
+    const artistEl = row.querySelector(".tartist");
+    titleEl.textContent = track.title;
+    artistEl.textContent = `${track.artist} · ${mmss(track.duration_ms)}`;
+    // These columns ellipsise, so keep the full text reachable on hover.
+    titleEl.title = track.title;
+    artistEl.title = `${track.artist} · ${mmss(track.duration_ms)}`;
+    if (track.album) artistEl.title += `\n${track.album}`;
     if (track.downloaded) {
       row.dataset.status = "exists";
       row.querySelector(".tstatus").textContent = "already downloaded";
@@ -298,13 +304,26 @@ function applyTask(task) {
   const matchEl = row.querySelector(".tmatch");
   if (isDirect) {
     matchEl.textContent = "";   // the track row already is the recording
+    matchEl.removeAttribute("title");
   } else if (task.match) {
     const flags = task.match.flags.map((f) => `<span class="flag">${f}</span>`).join("");
     matchEl.innerHTML =
       `${flags}<span class="score">${task.match.score}</span> · ` +
       `${escapeHtml(task.match.title)} — ${escapeHtml(task.match.artist)}`;
+    // The row truncates; the tooltip carries the whole thing, flags included,
+    // since those are the part worth reading in full.
+    const parts = [];
+    if (task.match.flags.length) parts.push(task.match.flags.join(", "));
+    parts.push(`score ${task.match.score}`);
+    parts.push(`${task.match.title} — ${task.match.artist}`);
+    if (task.match.duration_s) {
+      const d = task.match.duration_s;
+      parts.push(`${Math.floor(d / 60)}:${String(d % 60).padStart(2, "0")}`);
+    }
+    matchEl.title = parts.join("\n");
   } else {
     matchEl.textContent = "";
+    matchEl.removeAttribute("title");
   }
 
   const fix = row.querySelector(".tfix");
@@ -329,11 +348,13 @@ function togglePicker(row, task) {
     const title = document.createElement("div");
     title.className = "cand-title";
     title.textContent = cand.title;
+    title.title = cand.title;
     const sub = document.createElement("div");
     sub.className = "cand-sub";
     const mins = `${Math.floor(cand.duration_s / 60)}:${String(cand.duration_s % 60).padStart(2, "0")}`;
     sub.textContent = `${cand.artist} · ${mins} · score ${cand.score}` +
       (cand.flags.length ? ` · ${cand.flags.join(", ")}` : "");
+    sub.title = sub.textContent;
     info.append(title, sub);
 
     const actions = document.createElement("div");

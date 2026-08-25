@@ -163,7 +163,12 @@ code {
 .tmain { min-width: 0; }
 .ttitle { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tartist { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tmatch { font-size: 12px; color: var(--muted); margin-top: 3px; }
+/* Long titles (and any non-Latin script) blow past the column, so truncate
+   cleanly and hang the full text off the tooltip instead. */
+.tmatch {
+  font-size: 12px; color: var(--muted); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .tmatch .flag {
   color: var(--warn); border: 1px solid #4a3a1c; background: #241d10;
   padding: 1px 6px; border-radius: 20px; margin-right: 5px; font-size: 11px;

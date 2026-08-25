@@ -8,7 +8,15 @@ from __future__ import annotations
 
 import pytest
 
-from libber.matcher import Candidate, _duration_score, normalise, score, variants_in
+from libber.matcher import (
+    Candidate,
+    _duration_score,
+    comparable,
+    normalise,
+    score,
+    scripts_in,
+    variants_in,
+)
 
 
 def cand(title, artists=("Test Artist",), duration_s=200.0, album="", source="song"):
@@ -65,6 +73,67 @@ class TestVariantDetection:
     def test_substring_does_not_false_positive(self):
         # "live" inside "Delivery" must not read as a live recording.
         assert "live" not in variants_in("Delivery Man")
+
+
+class TestCrossScriptArtists:
+    """Spotify romanises artists that YouTube Music leaves in their native
+    script. "Yousei Teikoku" and "妖精帝國" share no characters, so fuzzy
+    matching read the correct official release as a different artist and buried
+    it at 39.6, below a fan video.
+    """
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            ("Yousei Teikoku", "latin"),
+            ("妖精帝國", "cjk"),
+            ("初音ミク", "cjk"),
+            ("방탄소년단", "hangul"),
+            ("Пикник", "cyrillic"),
+            ("Sanatçı Ç", "latin"),   # Latin with diacritics is still Latin
+        ],
+    )
+    def test_script_detection(self, name, expected):
+        assert expected in scripts_in(name)
+
+    def test_names_in_different_scripts_are_not_comparable(self):
+        assert comparable(["Yousei Teikoku"], ["妖精帝國"]) is False
+        assert comparable(["BTS"], ["방탄소년단"]) is False
+
+    def test_names_in_the_same_script_are_comparable(self):
+        assert comparable(["Queen"], ["Pentatonix"]) is True
+        assert comparable(["妖精帝國"], ["初音ミク"]) is True
+
+    def test_missing_names_do_not_block_comparison(self):
+        assert comparable([], ["Anyone"]) is True
+        assert comparable(["Anyone"], []) is True
+
+    def test_mixed_script_name_stays_comparable(self):
+        # "BABYMETAL (ベビーメタル)" carries both, so there is common ground.
+        assert comparable(["BABYMETAL"], ["BABYMETAL (ベビーメタル)"]) is True
+
+    def test_official_release_is_not_punished_for_its_script(self, track):
+        t = track(title="空想メソロギヰ", artists=["Yousei Teikoku"],
+                  album="PAX VESANIA", duration_ms=243_000)
+        result = score(t, cand("空想メソロギヰ", ["妖精帝國"], 240, album="PAX VESANIA"))
+        assert result.score > 75          # was 39.6 before
+        assert not result.risky
+        assert "different artist" not in result.flags
+        assert any("another script" in f for f in result.flags)
+
+    def test_abstaining_still_relies_on_title_and_duration(self, track):
+        """Declining to compare artists must not wave through a different song
+        that happens to be in another script."""
+        t = track(title="空想メソロギヰ", artists=["Yousei Teikoku"], duration_ms=243_000)
+        wrong_song = score(t, cand("全然違う歌", ["妖精帝國"], 243))
+        assert wrong_song.score < 60
+
+    def test_same_script_covers_are_still_caught(self, track):
+        """The abstain path must not weaken the cover check it sits beside."""
+        t = track(title="Bohemian Rhapsody", artists=["Queen"], duration_ms=354_000)
+        result = score(t, cand("Bohemian Rhapsody", ["Pentatonix"], 356))
+        assert result.risky
+        assert "different artist" in result.flags
 
 
 class TestDurationScore:

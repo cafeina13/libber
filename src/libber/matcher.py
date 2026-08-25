@@ -75,6 +75,33 @@ _LABELS = {
 }
 
 
+_SCRIPTS = {
+    "cjk": re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]"),
+    "hangul": re.compile(r"[ᄀ-ᇿ가-힯]"),
+    "cyrillic": re.compile(r"[Ѐ-ӿ]"),
+    "greek": re.compile(r"[Ͱ-Ͽ]"),
+    "arabic": re.compile(r"[؀-ۿ]"),
+    "latin": re.compile(r"[A-Za-z]"),
+}
+
+
+def scripts_in(text: str) -> frozenset[str]:
+    return frozenset(name for name, rx in _SCRIPTS.items() if rx.search(text or ""))
+
+
+def comparable(left: list[str], right: list[str]) -> bool:
+    """Whether two name lists are written in a shared script.
+
+    Spotify romanises artists that YouTube Music leaves in their native script
+    (and the reverse), so "Yousei Teikoku" and "妖精帝國" are the same act with
+    zero characters in common. Fuzzy matching cannot see that, so rather than
+    scoring them as a mismatch we decline to compare them at all.
+    """
+    a = frozenset().union(*(scripts_in(x) for x in left)) if left else frozenset()
+    b = frozenset().union(*(scripts_in(x) for x in right)) if right else frozenset()
+    return not a or not b or bool(a & b)
+
+
 def normalise(text: str) -> str:
     text = _HARMLESS.sub(" ", text or "")
     text = _DASH_TAIL.sub(" ", text)
@@ -145,10 +172,16 @@ def score(track: Track, cand: Candidate) -> Candidate:
 
     q_artists = [normalise(a) for a in track.artists] or [""]
     c_artists = [normalise(a) for a in cand.artists] or [normalise(cand.title)]
-    artist_score = max(
-        (fuzz.token_set_ratio(qa, ca) for qa in q_artists for ca in c_artists),
-        default=0.0,
-    )
+    cross_script = not comparable(track.artists, cand.artists)
+    if cross_script:
+        # Same name, different writing system. Abstain: award neither credit
+        # nor penalty, and let title and duration decide.
+        artist_score = 50.0
+    else:
+        artist_score = max(
+            (fuzz.token_set_ratio(qa, ca) for qa in q_artists for ca in c_artists),
+            default=0.0,
+        )
 
     delta = cand.duration_s - track.duration_s
     dur_score = _duration_score(delta) if cand.duration_s else 50.0
@@ -175,7 +208,9 @@ def score(track: Track, cand: Candidate) -> Candidate:
     # A different performer is how covers sneak in, and the weighted artist
     # term alone isn't decisive enough -- Pentatonix's "Bohemian Rhapsody"
     # otherwise outranks Queen's. Penalise the mismatch outright.
-    if artist_score < 45:
+    if cross_script:
+        flags.append("artist name in another script — not compared")
+    elif artist_score < 45:
         total -= 25
         flags.append("different artist")
         risky = True
