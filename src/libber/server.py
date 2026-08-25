@@ -65,7 +65,7 @@ async def lifespan(_: FastAPI):
     state.jobs.shutdown()
 
 
-app = FastAPI(title="spt2yt", lifespan=lifespan)
+app = FastAPI(title="libber", lifespan=lifespan)
 
 
 # --------------------------------------------------------------------------
@@ -207,7 +207,7 @@ async def callback(request: Request) -> HTMLResponse:
     tone = "#1db954" if ok else "#e5484d"
     return HTMLResponse(
         f"""<!doctype html><meta charset="utf-8">
-<title>spt2yt</title>
+<title>libber</title>
 <body style="font:16px/1.6 system-ui;background:#0d0f12;color:#e8eaed;
 display:grid;place-items:center;height:100vh;margin:0">
 <div style="text-align:center">

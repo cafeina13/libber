@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.download import safe_name, target_path
-from spt2yt.library import Library, folder_for, write_m3u
-from spt2yt.models import Playlist
+from libber.download import safe_name, target_path
+from libber.library import Library, folder_for, write_m3u
+from libber.models import Playlist
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestSyncReport:
         assert len(library.sync_report(shrunk)["removed"]) == 1
 
     def test_corrupt_state_file_does_not_crash(self, tmp_path):
-        state = tmp_path / ".spt2yt" / "library.json"
+        state = tmp_path / ".libber" / "library.json"
         state.parent.mkdir(parents=True)
         state.write_text("{ this is not json", encoding="utf-8")
         assert Library(tmp_path).known_ids() == set()

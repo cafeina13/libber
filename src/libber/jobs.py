@@ -371,7 +371,7 @@ class JobManager:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.pool = ThreadPoolExecutor(
-            max_workers=max(1, settings.concurrency), thread_name_prefix="spt2yt"
+            max_workers=max(1, settings.concurrency), thread_name_prefix="libber"
         )
         self.jobs: dict[str, Job] = {}
 

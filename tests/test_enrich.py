@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.enrich import ACCEPT_SCORE, _apply, _score
+from libber.enrich import ACCEPT_SCORE, _apply, _score
 
 
 def sp_track(name, artists=("Test Artist",), duration_ms=200_000, album="Test Album",

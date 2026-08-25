@@ -412,6 +412,47 @@ wheels = [
 ]
 
 [[package]]
+name = "libber"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "mutagen" },
+    { name = "python-dotenv" },
+    { name = "rapidfuzz" },
+    { name = "spotipy" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "yt-dlp" },
+    { name = "ytmusicapi" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx2" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "mutagen", specifier = ">=1.48.1" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "rapidfuzz", specifier = ">=3.14.5" },
+    { name = "spotipy", specifier = ">=2.26.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
+    { name = "yt-dlp", specifier = ">=2026.8.19" },
+    { name = "ytmusicapi", specifier = ">=1.12.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx2", specifier = ">=2.12.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+]
+
+[[package]]
 name = "mutagen"
 version = "1.48.1"
 source = { registry = "https://pypi.org/simple" }
@@ -721,47 +762,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/88/00/2de6f99c9b8e5fd519fd55b11ec94b8e97a51e8a9fdf546edfe6aaf8727b/spotipy-2.26.0.tar.gz", hash = "sha256:df6a25d8209072efa8cea165608ee644884e3804f8762b6d8e06ca1a5c7f8a63", size = 45292, upload-time = "2026-03-03T16:37:39.367Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/ff/594b82c19b3291eb3f9454beba7f74f19753035fb9b3e54eebd5ae5013a6/spotipy-2.26.0-py3-none-any.whl", hash = "sha256:2726854ddfa0e5624aada592e737832ec75bdc00ae12c102779f8bd995329d49", size = 31985, upload-time = "2026-03-03T16:37:38.225Z" },
-]
-
-[[package]]
-name = "spt2yt"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "mutagen" },
-    { name = "python-dotenv" },
-    { name = "rapidfuzz" },
-    { name = "spotipy" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "yt-dlp" },
-    { name = "ytmusicapi" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx2" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "mutagen", specifier = ">=1.48.1" },
-    { name = "python-dotenv", specifier = ">=1.2.3" },
-    { name = "rapidfuzz", specifier = ">=3.14.5" },
-    { name = "spotipy", specifier = ">=2.26.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
-    { name = "yt-dlp", specifier = ">=2026.8.19" },
-    { name = "ytmusicapi", specifier = ">=1.12.2" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx2", specifier = ">=2.12.0" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
 ]
 
 [[package]]

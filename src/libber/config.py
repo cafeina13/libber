@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 # Where we keep the OAuth token cache and the credentials .env. Kept out of the
 # output directory so wiping a music folder never logs you out.
-APP_HOME = Path(os.environ.get("SPT2YT_HOME") or (Path.home() / ".spt2yt"))
+APP_HOME = Path(os.environ.get("LIBBER_HOME") or (Path.home() / ".libber"))
 ENV_FILE = APP_HOME / "credentials.env"
 TOKEN_CACHE = APP_HOME / "spotify-token.json"
 # spotipy defaults its client-credentials cache to ".cache" in the working
@@ -18,12 +18,12 @@ TOKEN_CACHE = APP_HOME / "spotify-token.json"
 # started from -- the repo root, typically. Keep it with the other secrets.
 APP_TOKEN_CACHE = APP_HOME / "spotify-app-token.json"
 
-DEFAULT_OUTPUT = Path.home() / "Music" / "spt2yt"
+DEFAULT_OUTPUT = Path.home() / "Music" / "libber"
 
 # Loopback only, and 127.0.0.1 rather than "localhost": Spotify rejects
 # http://localhost redirect URIs on apps created after April 2025.
 SERVER_HOST = "127.0.0.1"
-SERVER_PORT = int(os.environ.get("SPT2YT_PORT") or 8765)
+SERVER_PORT = int(os.environ.get("LIBBER_PORT") or 8765)
 REDIRECT_PATH = "/callback"
 
 SCOPES = "playlist-read-private playlist-read-collaborative user-library-read"
@@ -58,12 +58,12 @@ def load_settings() -> Settings:
         load_dotenv(ENV_FILE, override=False)
     load_dotenv(override=False)  # a project-local .env still wins over nothing
 
-    output = os.environ.get("SPT2YT_OUTPUT")
+    output = os.environ.get("LIBBER_OUTPUT")
     return Settings(
         client_id=os.environ.get("SPOTIFY_CLIENT_ID", "").strip(),
         client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET", "").strip(),
         output_dir=Path(output).expanduser() if output else DEFAULT_OUTPUT,
-        concurrency=int(os.environ.get("SPT2YT_CONCURRENCY") or 3),
+        concurrency=int(os.environ.get("LIBBER_CONCURRENCY") or 3),
     )
 
 

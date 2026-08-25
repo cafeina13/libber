@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.youtube import (
+from libber.youtube import (
     YouTubeError,
     _clean_title,
     _split_artist_title,

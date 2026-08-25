@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Credentials. The real ones live in ~/.spt2yt/, outside the repo, but never
+# Credentials. The real ones live in ~/.libber/, outside the repo, but never
 # let a local override or a stray token cache become committable.
 .env
 *.env
@@ -20,9 +20,14 @@ credentials.env
 # Downloaded audio, in case anyone points the output folder at the repo
 *.opus
 *.m3u8
-.spt2yt/
+.libber/
 
 # OS cruft
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Coverage artifacts
+.coverage
+.coverage.*
+htmlcov/

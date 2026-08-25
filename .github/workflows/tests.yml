@@ -28,4 +28,4 @@ jobs:
       # they need credentials, they are rate-limited, and they would make CI
       # fail for reasons that have nothing to do with the commit.
       - name: Run tests
-        run: uv run pytest --cov=spt2yt --cov-report=term-missing
+        run: uv run pytest --cov=libber --cov-report=term-missing

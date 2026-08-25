@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.config import load_settings
-from spt2yt.models import Playlist, Track
+from libber.config import load_settings
+from libber.models import Playlist, Track
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -34,7 +34,7 @@ def spotify_client():
     settings = load_settings()
     if not settings.has_credentials:
         pytest.skip("no Spotify credentials configured")
-    from spt2yt.spotify import SpotifyAuth
+    from libber.spotify import SpotifyAuth
 
     return SpotifyAuth(settings, 8765).app_client()
 

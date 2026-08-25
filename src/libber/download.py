@@ -105,7 +105,7 @@ def fetch_audio(
         elif d.get("status") == "finished":
             on_progress(0.99, "converting")
 
-    with tempfile.TemporaryDirectory(prefix="spt2yt-") as raw_tmp:
+    with tempfile.TemporaryDirectory(prefix="libber-") as raw_tmp:
         tmp = Path(raw_tmp)
         try:
             with YoutubeDL(_ydl_opts(tmp, hook)) as ydl:
@@ -197,7 +197,7 @@ def write_tags(path: Path, track: Track, source_url: str = "") -> None:
         audio["spotifyid"] = [track.id]
         audio["www"] = [track.url]
     if source_url:
-        audio["comment"] = [f"Downloaded by spt2yt from {source_url}"]
+        audio["comment"] = [f"Downloaded by libber from {source_url}"]
 
     data = _cover_bytes(track.cover_url)
     if data:

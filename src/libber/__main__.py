@@ -1,4 +1,4 @@
-"""Entry point: `spt2yt` / `python -m spt2yt`."""
+"""Entry point: `libber` / `python -m libber`."""
 
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ def main() -> int:
             pass
 
     parser = argparse.ArgumentParser(
-        prog="spt2yt",
-        description="Transfer Spotify playlists into offline Opus files via YouTube Music.",
+        prog="libber",
+        description="Build an offline music library from Spotify and YouTube playlists.",
     )
     parser.add_argument("--port", type=int, default=8765, help="local port (default 8765)")
-    parser.add_argument("--output", help="download folder (default ~/Music/spt2yt)")
+    parser.add_argument("--output", help="download folder (default ~/Music/libber)")
     parser.add_argument("--jobs", type=int, help="parallel downloads (default 3)")
     parser.add_argument("--no-browser", action="store_true", help="don't open a browser")
     args = parser.parse_args()
@@ -41,11 +41,11 @@ def main() -> int:
         return 1
 
     # Set before importing the app: module-level state reads these at import.
-    os.environ["SPT2YT_PORT"] = str(args.port)
+    os.environ["LIBBER_PORT"] = str(args.port)
     if args.output:
-        os.environ["SPT2YT_OUTPUT"] = args.output
+        os.environ["LIBBER_OUTPUT"] = args.output
     if args.jobs:
-        os.environ["SPT2YT_CONCURRENCY"] = str(args.jobs)
+        os.environ["LIBBER_CONCURRENCY"] = str(args.jobs)
 
     import uvicorn
 
@@ -53,7 +53,7 @@ def main() -> int:
     from .server import app, state
 
     url = f"http://{SERVER_HOST}:{args.port}"
-    print(f"\n  spt2yt   ->  {url}")
+    print(f"\n  libber   ->  {url}")
     print(f"  downloads    ->  {state.settings.output_dir}")
     print(f"  redirect URI ->  {redirect_uri(args.port)}\n")
 

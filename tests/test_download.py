@@ -12,8 +12,8 @@ import subprocess
 import pytest
 from mutagen.oggopus import OggOpus
 
-from spt2yt.download import _tidy_error, write_tags
-from spt2yt.youtube import _tidy
+from libber.download import _tidy_error, write_tags
+from libber.youtube import _tidy
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
 

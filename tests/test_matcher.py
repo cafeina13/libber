@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.matcher import Candidate, _duration_score, normalise, score, variants_in
+from libber.matcher import Candidate, _duration_score, normalise, score, variants_in
 
 
 def cand(title, artists=("Test Artist",), duration_s=200.0, album="", source="song"):

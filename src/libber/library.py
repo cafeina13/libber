@@ -2,7 +2,7 @@
 
 The state file is what makes re-syncing cheap -- a second run of the same
 playlist only touches tracks that are genuinely new. Entries are verified
-against the filesystem on read, so deleting a file is enough to make spt2yt
+against the filesystem on read, so deleting a file is enough to make libber
 fetch it again.
 """
 
@@ -18,7 +18,7 @@ from typing import Any
 from .download import safe_name
 from .spotify import Playlist, Track
 
-STATE_DIRNAME = ".spt2yt"
+STATE_DIRNAME = ".libber"
 STATE_FILE = "library.json"
 VERSION = 1
 

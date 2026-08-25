@@ -1,4 +1,4 @@
-# spt2yt
+# libber
 
 Build an offline music library from playlists you already have. Paste a Spotify
 or YouTube link and get back a folder of properly tagged `.opus` files. Runs as
@@ -51,19 +51,19 @@ uv sync
 ## Run
 
 ```
-uv run spt2yt
+uv run libber
 ```
 
 It opens <http://127.0.0.1:8765> in your browser.
 
 ```
-uv run spt2yt --port 9000        # different port
-uv run spt2yt --output D:/Music  # different download folder
-uv run spt2yt --jobs 5           # more parallel downloads
-uv run spt2yt --no-browser       # don't open a browser
+uv run libber --port 9000        # different port
+uv run libber --output D:/Music  # different download folder
+uv run libber --jobs 5           # more parallel downloads
+uv run libber --no-browser       # don't open a browser
 ```
 
-Downloads default to `~/Music/spt2yt`, one folder per playlist.
+Downloads default to `~/Music/libber`, one folder per playlist.
 
 ## One-time Spotify setup
 
@@ -76,9 +76,9 @@ on first run, but for reference:
    `http://127.0.0.1:8765/callback` (the app shows the exact string to use, and
    it changes if you pass `--port`).
 3. Tick **Web API**, save, then open **Settings** to reveal the client ID and
-   secret. Paste both into spt2yt.
+   secret. Paste both into libber.
 
-Credentials are stored in `~/.spt2yt/credentials.env` and never leave your
+Credentials are stored in `~/.libber/credentials.env` and never leave your
 machine except to talk to Spotify.
 
 ### You also need to sign in
@@ -96,7 +96,7 @@ The split, confirmed against the live API:
 | Albums, album tracks, single tracks, search | works |
 
 Because the metadata endpoint still answers an app token, a signed-out failure
-looks odd: the playlist *name* resolves and the *tracks* 401. spt2yt asks for
+looks odd: the playlist *name* resolves and the *tracks* 401. libber asks for
 the sign-in up front instead.
 
 ### You can only read your own playlists
@@ -110,7 +110,7 @@ Signing in is necessary but not sufficient. Also confirmed against the live API:
 | **Someone else's — even fully public** | **no (403)** |
 | **Spotify editorial / algorithmic** (RapCaviar, Discover Weekly, Daily Mix, Release Radar) | **no (404)** |
 
-This is a Spotify API restriction, not something spt2yt can route around. To
+This is a Spotify API restriction, not something libber can route around. To
 grab a playlist you don't own: open it in Spotify, select all the tracks, add
 them to a playlist of your own, then load that one here. Albums and single
 tracks are unaffected — those load regardless of who made them.
@@ -157,11 +157,11 @@ walking down the ranked list if the top pick turns out to be unavailable.
 
 | Path | What |
 | --- | --- |
-| `~/Music/spt2yt/` | Downloads, one folder per playlist |
-| `~/Music/spt2yt/.spt2yt/library.json` | What's downloaded, for cheap re-syncs |
-| `~/.spt2yt/credentials.env` | Spotify client ID + secret |
-| `~/.spt2yt/spotify-token.json` | OAuth token cache (your sign-in) |
-| `~/.spt2yt/spotify-app-token.json` | App token cache |
+| `~/Music/libber/` | Downloads, one folder per playlist |
+| `~/Music/libber/.libber/library.json` | What's downloaded, for cheap re-syncs |
+| `~/.libber/credentials.env` | Spotify client ID + secret |
+| `~/.libber/spotify-token.json` | OAuth token cache (your sign-in) |
+| `~/.libber/spotify-app-token.json` | App token cache |
 
 Credentials live outside the music folder on purpose, so wiping a download
 folder never logs you out.
@@ -169,7 +169,7 @@ folder never logs you out.
 ## Layout
 
 ```
-src/spt2yt/
+src/libber/
   __main__.py   CLI entry point, ffmpeg check, launches uvicorn
   config.py     settings, paths, redirect URI
   models.py     Track / Playlist, shared by both sources
@@ -209,7 +209,7 @@ video id.
 
 A YouTube track arrives with a title, a channel and a 16:9 thumbnail — no album,
 no release date, no ISRC. Spotify's *search* endpoint has all of it and answers
-an app token, so spt2yt looks the recording up there and copies the tags across,
+an app token, so libber looks the recording up there and copies the tags across,
 including square 640×640 cover art in place of the video thumbnail. It falls
 back to YouTube Music's own fields when Spotify has no credentials or no
 confident match, and to the playlist title for `OLAK5uy_…` album playlists.

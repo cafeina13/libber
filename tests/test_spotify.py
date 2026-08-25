@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt.spotify import SpotifyError, _pick_cover, parse_source
+from libber.spotify import SpotifyError, _pick_cover, parse_source
 
 PID = "37i9dQZF1DXcBWIGoYBM5M"
 

@@ -11,11 +11,11 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from spt2yt.config import Settings
-from spt2yt.models import Playlist, Track
-from spt2yt.server import app, state
-from spt2yt.spotify import SpotifyError
-from spt2yt.youtube import YouTubeError
+from libber.config import Settings
+from libber.models import Playlist, Track
+from libber.server import app, state
+from libber.spotify import SpotifyError
+from libber.youtube import YouTubeError
 
 
 @pytest.fixture
@@ -59,7 +59,7 @@ class TestStaticAndStatus:
     def test_serves_the_page(self, client):
         r = client.get("/")
         assert r.status_code == 200
-        assert "spt2yt" in r.text
+        assert "libber" in r.text
 
     def test_serves_assets(self, client):
         assert client.get("/static/app.js").status_code == 200
@@ -121,7 +121,7 @@ class TestSettings:
 
 class TestLoadingPlaylists:
     def test_returns_tracks_and_a_sync_report(self, client, monkeypatch):
-        monkeypatch.setattr("spt2yt.server.fetch_playlist",
+        monkeypatch.setattr("libber.server.fetch_playlist",
                             lambda auth, url: sample_playlist())
         body = client.post("/api/playlist", json={"url": "spotify:playlist:x"}).json()
         assert body["playlist"]["name"] == "Test Playlist"
@@ -135,7 +135,7 @@ class TestLoadingPlaylists:
         def needs_login(auth, url):
             raise SpotifyError("LOGIN_REQUIRED")
 
-        monkeypatch.setattr("spt2yt.server.fetch_playlist", needs_login)
+        monkeypatch.setattr("libber.server.fetch_playlist", needs_login)
         r = client.post("/api/playlist", json={"url": "spotify:playlist:x"})
         assert r.status_code == 401
         assert r.json()["error"] == "login_required"
@@ -146,7 +146,7 @@ class TestLoadingPlaylists:
         def refuse(auth, url):
             raise SpotifyError("Spotify only lets you read playlists you own")
 
-        monkeypatch.setattr("spt2yt.server.fetch_playlist", refuse)
+        monkeypatch.setattr("libber.server.fetch_playlist", refuse)
         r = client.post("/api/playlist", json={"url": "spotify:playlist:x"})
         assert r.status_code == 400
         assert "you own" in r.json()["detail"]
@@ -154,7 +154,7 @@ class TestLoadingPlaylists:
 
 class TestLoadingYouTube:
     def test_marks_the_playlist_as_direct(self, client, monkeypatch):
-        monkeypatch.setattr("spt2yt.server.fetch_youtube",
+        monkeypatch.setattr("libber.server.fetch_youtube",
                             lambda url: sample_playlist(kind="yt-playlist", direct=True))
         body = client.post("/api/youtube", json={"url": "https://youtu.be/x"}).json()
         assert body["playlist"]["kind"] == "yt-playlist"
@@ -164,14 +164,14 @@ class TestLoadingYouTube:
         def bad(url):
             raise YouTubeError("That doesn't look like a YouTube link.")
 
-        monkeypatch.setattr("spt2yt.server.fetch_youtube", bad)
+        monkeypatch.setattr("libber.server.fetch_youtube", bad)
         r = client.post("/api/youtube", json={"url": "nope"})
         assert r.status_code == 400
         assert "YouTube" in r.json()["detail"]
 
     def test_needs_no_credentials(self, client, monkeypatch):
         """The YouTube card must work with no Spotify setup at all."""
-        monkeypatch.setattr("spt2yt.server.fetch_youtube",
+        monkeypatch.setattr("libber.server.fetch_youtube",
                             lambda url: sample_playlist(kind="yt-video", n=1, direct=True))
         assert client.get("/api/status").json()["has_credentials"] is False
         assert client.post("/api/youtube", json={"url": "https://youtu.be/x"}).status_code == 200
@@ -191,9 +191,9 @@ class TestJobs:
         ).status_code == 404
 
     def test_creates_a_job_from_a_loaded_playlist(self, client, monkeypatch):
-        monkeypatch.setattr("spt2yt.server.fetch_playlist",
+        monkeypatch.setattr("libber.server.fetch_playlist",
                             lambda auth, url: sample_playlist())
-        monkeypatch.setattr("spt2yt.jobs.Job.start", lambda self, pool: None)
+        monkeypatch.setattr("libber.jobs.Job.start", lambda self, pool: None)
         loaded = client.post("/api/playlist", json={"url": "spotify:playlist:x"}).json()
 
         r = client.post("/api/jobs", json={"playlist_id": loaded["playlist"]["id"],
@@ -207,9 +207,9 @@ class TestJobs:
         assert client.post(f"/api/jobs/{body['job_id']}/cancel").json() == {"ok": True}
 
     def test_empty_selection_downloads_the_whole_playlist(self, client, monkeypatch):
-        monkeypatch.setattr("spt2yt.server.fetch_playlist",
+        monkeypatch.setattr("libber.server.fetch_playlist",
                             lambda auth, url: sample_playlist(n=3))
-        monkeypatch.setattr("spt2yt.jobs.Job.start", lambda self, pool: None)
+        monkeypatch.setattr("libber.jobs.Job.start", lambda self, pool: None)
         loaded = client.post("/api/playlist", json={"url": "spotify:playlist:x"}).json()
 
         body = client.post("/api/jobs", json={"playlist_id": loaded["playlist"]["id"],

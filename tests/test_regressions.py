@@ -11,9 +11,9 @@ import json
 
 import pytest
 
-from spt2yt.download import safe_name, target_path
-from spt2yt.library import Library, folder_for
-from spt2yt.spotify import _build_track, _entry_payload
+from libber.download import safe_name, target_path
+from libber.library import Library, folder_for
+from libber.spotify import _build_track, _entry_payload
 
 
 class TestPlaylistItemRename:
@@ -175,7 +175,7 @@ class TestStateFileDurability:
         json.loads(library.state_path.read_text(encoding="utf-8"))  # valid JSON
 
     def test_unreadable_state_does_not_lose_the_audio(self, tmp_path):
-        state = tmp_path / ".spt2yt" / "library.json"
+        state = tmp_path / ".libber" / "library.json"
         state.parent.mkdir(parents=True)
         state.write_text('{"tracks": {"a": ', encoding="utf-8")  # truncated
         library = Library(tmp_path)

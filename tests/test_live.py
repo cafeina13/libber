@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from spt2yt import enrich, matcher, youtube
-from spt2yt.download import fetch_audio, write_tags
-from spt2yt.jobs import _direct_candidate
+from libber import enrich, matcher, youtube
+from libber.download import fetch_audio, write_tags
+from libber.jobs import _direct_candidate
 
 pytestmark = pytest.mark.network
 

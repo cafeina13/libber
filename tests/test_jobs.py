@@ -10,12 +10,12 @@ import asyncio
 
 import pytest
 
-from spt2yt.config import Settings
-from spt2yt.download import Result, target_path
-from spt2yt.jobs import DONE, ERROR, EXISTS, REVIEW, Job, _direct_candidate
-from spt2yt.library import Library
-from spt2yt.matcher import Candidate
-from spt2yt.models import Playlist
+from libber.config import Settings
+from libber.download import Result, target_path
+from libber.jobs import DONE, ERROR, EXISTS, REVIEW, Job, _direct_candidate
+from libber.library import Library
+from libber.matcher import Candidate
+from libber.models import Playlist
 
 
 @pytest.fixture
@@ -56,8 +56,8 @@ def stub_download(monkeypatch):
             on_progress(1.0, "done")
         return Result(path=dest, video_id=cand.video_id, bitrate=133, duration_s=200.0)
 
-    monkeypatch.setattr("spt2yt.jobs.fetch_audio", fake)
-    monkeypatch.setattr("spt2yt.jobs.write_tags", lambda *a, **k: None)
+    monkeypatch.setattr("libber.jobs.fetch_audio", fake)
+    monkeypatch.setattr("libber.jobs.write_tags", lambda *a, **k: None)
     return calls
 
 
@@ -80,7 +80,7 @@ class TestAlreadyDownloaded:
 class TestMatching:
     def test_downloads_a_confident_match(self, make_job, playlist, stub_download, monkeypatch):
         pl = playlist(1)
-        monkeypatch.setattr("spt2yt.matcher.search", lambda t: [candidate(score=95.0)])
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=95.0)])
         job = make_job(pl)
         task = job.tasks[pl.tracks[0].id]
 
@@ -91,7 +91,7 @@ class TestMatching:
 
     def test_low_score_goes_to_review(self, make_job, playlist, stub_download, monkeypatch):
         pl = playlist(1)
-        monkeypatch.setattr("spt2yt.matcher.search", lambda t: [candidate(score=40.0)])
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=40.0)])
         job = make_job(pl)
         task = job.tasks[pl.tracks[0].id]
 
@@ -106,7 +106,7 @@ class TestMatching:
         when title and artist score perfectly."""
         pl = playlist(1)
         monkeypatch.setattr(
-            "spt2yt.matcher.search",
+            "libber.matcher.search",
             lambda t: [candidate(score=99.0, risky=True, flags=["live version"])],
         )
         job = make_job(pl)
@@ -120,7 +120,7 @@ class TestMatching:
     def test_review_can_be_switched_off(self, make_job, playlist, stub_download, monkeypatch):
         pl = playlist(1)
         monkeypatch.setattr(
-            "spt2yt.matcher.search", lambda t: [candidate(score=10.0, risky=True)]
+            "libber.matcher.search", lambda t: [candidate(score=10.0, risky=True)]
         )
         job = make_job(pl, skip_low_matches=False)
         task = job.tasks[pl.tracks[0].id]
@@ -130,7 +130,7 @@ class TestMatching:
 
     def test_no_results_is_an_error(self, make_job, playlist, monkeypatch):
         pl = playlist(1)
-        monkeypatch.setattr("spt2yt.matcher.search", lambda t: [])
+        monkeypatch.setattr("libber.matcher.search", lambda t: [])
         job = make_job(pl)
         task = job.tasks[pl.tracks[0].id]
 
@@ -143,7 +143,7 @@ class TestMatching:
         def boom(t):
             raise RuntimeError("network down")
 
-        monkeypatch.setattr("spt2yt.matcher.search", boom)
+        monkeypatch.setattr("libber.matcher.search", boom)
         job = make_job(pl)
         task = job.tasks[pl.tracks[0].id]
 
@@ -158,7 +158,7 @@ class TestFallbackDownload:
     ):
         """Unavailable and region-locked videos are common enough that giving
         up on the first failure would cost real tracks."""
-        from spt2yt.download import DownloadFailed
+        from libber.download import DownloadFailed
 
         pl = playlist(1)
         attempts = []
@@ -171,10 +171,10 @@ class TestFallbackDownload:
             dest.write_bytes(b"audio")
             return Result(path=dest, video_id=cand.video_id, bitrate=133, duration_s=200.0)
 
-        monkeypatch.setattr("spt2yt.jobs.fetch_audio", flaky)
-        monkeypatch.setattr("spt2yt.jobs.write_tags", lambda *a, **k: None)
+        monkeypatch.setattr("libber.jobs.fetch_audio", flaky)
+        monkeypatch.setattr("libber.jobs.write_tags", lambda *a, **k: None)
         monkeypatch.setattr(
-            "spt2yt.matcher.search",
+            "libber.matcher.search",
             lambda t: [candidate(video_id="bad"), candidate(video_id="good")],
         )
         job = make_job(pl)
@@ -185,15 +185,15 @@ class TestFallbackDownload:
         assert task.status == DONE
 
     def test_all_candidates_failing_is_an_error(self, make_job, playlist, monkeypatch):
-        from spt2yt.download import DownloadFailed
+        from libber.download import DownloadFailed
 
         pl = playlist(1)
 
         def always_fail(cand, dest, on_progress=None):
             raise DownloadFailed("nope")
 
-        monkeypatch.setattr("spt2yt.jobs.fetch_audio", always_fail)
-        monkeypatch.setattr("spt2yt.matcher.search", lambda t: [candidate()])
+        monkeypatch.setattr("libber.jobs.fetch_audio", always_fail)
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate()])
         job = make_job(pl)
         task = job.tasks[pl.tracks[0].id]
 
@@ -210,7 +210,7 @@ class TestDuplicateReuse:
         twice; downloading it twice wastes time and leaves duplicate files."""
         pl = playlist(2)
         monkeypatch.setattr(
-            "spt2yt.matcher.search", lambda t: [candidate(video_id="shared")]
+            "libber.matcher.search", lambda t: [candidate(video_id="shared")]
         )
         job = make_job(pl)
 
@@ -257,7 +257,7 @@ class TestDirectYouTubeTracks:
         def explode(t):
             raise AssertionError("matcher must not run for a direct source")
 
-        monkeypatch.setattr("spt2yt.matcher.search", explode)
+        monkeypatch.setattr("libber.matcher.search", explode)
         pl = Playlist(
             id="yt:x", kind="yt-playlist", name="P",
             tracks=[track(id="v" * 11, video_id="v" * 11, album="Known")],

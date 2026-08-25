@@ -1,7 +1,7 @@
 [project]
-name = "spt2yt"
+name = "libber"
 version = "0.1.0"
-description = "Transfer Spotify playlists into offline Opus files via YouTube Music"
+description = "Build an offline music library from Spotify and YouTube playlists"
 readme = "README.md"
 authors = [
     { name = "cafeina13", email = "99685198+cafeina13@users.noreply.github.com" }
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-spt2yt = "spt2yt.__main__:main"
+libber = "libber.__main__:main"
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
