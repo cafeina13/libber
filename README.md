@@ -232,6 +232,27 @@ outranking the original, a 64-second excerpt beating the full song, a karaoke
 pressing hiding behind a clean track title. The comments name the failure, so
 the tests read as a record of what actually goes wrong when matching music.
 
+`tests/test_regressions.py` is the same idea made explicit: every test there is
+a bug that actually shipped, including the one that mattered most — Spotify
+renaming the playlist-entry payload from `track` to `item`, which silently
+skipped every track in a 655-track playlist while looking like it worked.
+
+| file | what it covers |
+| --- | --- |
+| `test_matcher.py` | scoring, variant detection, tie-breaking |
+| `test_regressions.py` | bugs that shipped, pinned so they can't return |
+| `test_jobs.py` | skip / review / reuse / retry / rename decisions |
+| `test_server.py` | routes, validation, error messages |
+| `test_library.py` | sync reports, dedup, `.m3u8`, filenames |
+| `test_spotify.py`, `test_youtube.py` | link parsing, response shaping |
+| `test_enrich.py` | when metadata is accepted, and when it's refused |
+| `test_download.py` | tag round-trip against a real Opus file |
+| `test_live.py` | opt-in, calls the real services |
+
+CI runs the offline suite on every push (`.github/workflows/tests.yml`). The
+network tests stay out of CI deliberately: they need credentials and would fail
+for reasons unrelated to the commit.
+
 ## Notes
 
 - Downloads are for personal use. Respect the rights of whoever made the music.
