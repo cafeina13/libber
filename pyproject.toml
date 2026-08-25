@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Transfer Spotify playlists into offline Opus files via YouTube Music"
 readme = "README.md"
 authors = [
-    { name = "cafeina13", email = "ulukoseahmetali032@gmail.com" }
+    { name = "cafeina13", email = "99685198+cafeina13@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [

@@ -1,8 +1,8 @@
 # spt2yt
 
-Turn a Spotify playlist into a folder of tagged, offline `.opus` files, matched
-through YouTube Music. Runs as a small local web app — paste a playlist link,
-pick what you want, watch it download.
+Build an offline music library from playlists you already have. Paste a Spotify
+or YouTube link and get back a folder of properly tagged `.opus` files. Runs as
+a small local web app.
 
 Spotify's API gives you metadata but never audio, so the audio comes from
 YouTube Music. The hard part isn't downloading, it's making sure the thing you
@@ -160,7 +160,8 @@ walking down the ranked list if the top pick turns out to be unavailable.
 | `~/Music/spt2yt/` | Downloads, one folder per playlist |
 | `~/Music/spt2yt/.spt2yt/library.json` | What's downloaded, for cheap re-syncs |
 | `~/.spt2yt/credentials.env` | Spotify client ID + secret |
-| `~/.spt2yt/spotify-token.json` | OAuth token cache |
+| `~/.spt2yt/spotify-token.json` | OAuth token cache (your sign-in) |
+| `~/.spt2yt/spotify-app-token.json` | App token cache |
 
 Credentials live outside the music folder on purpose, so wiping a download
 folder never logs you out.
@@ -175,6 +176,7 @@ src/spt2yt/
   spotify.py    Spotify auth + playlist/album/liked-songs reading
   youtube.py    YouTube + YouTube Music playlists and videos, title cleanup
   matcher.py    YouTube Music search, scoring, variant detection
+  enrich.py     album/date/ISRC/artwork lookup for YouTube-sourced tracks
   download.py   yt-dlp fetch, filename sanitising, Vorbis tags + cover art
   jobs.py       thread-pool orchestration, live progress events
   library.py    on-disk state, sync reports, .m3u8 writing
@@ -200,11 +202,25 @@ video id.
   `(Lyrics)`, `(HD)` and friends are stripped, and `Artist - Title` is split
   apart when the uploader used that form. Otherwise the channel name becomes
   the artist, minus YouTube's ` - Topic` suffix.
-- Metadata is thinner than Spotify's: no ISRC, and cover art is the video
-  thumbnail rather than square album art. For YouTube Music album playlists
-  (`OLAK5uy_…`) the album name is filled in from the playlist itself.
 - Private, deleted and live entries are skipped and reported rather than
   failing the whole playlist.
+
+### Filling in what YouTube doesn't give you
+
+A YouTube track arrives with a title, a channel and a 16:9 thumbnail — no album,
+no release date, no ISRC. Spotify's *search* endpoint has all of it and answers
+an app token, so spt2yt looks the recording up there and copies the tags across,
+including square 640×640 cover art in place of the video thumbnail. It falls
+back to YouTube Music's own fields when Spotify has no credentials or no
+confident match, and to the playlist title for `OLAK5uy_…` album playlists.
+
+The bar is deliberately higher than for downloading. A mediocre download still
+gets you the song; a mediocre metadata match silently mislabels your library
+forever. So candidates are scored the same way, then held to a stricter
+threshold — wrong durations, different artists and live-versus-studio
+mismatches are refused outright. **No album beats the wrong album.**
+
+Turn it off in Settings if you'd rather keep YouTube's own metadata.
 
 ## Tests
 
