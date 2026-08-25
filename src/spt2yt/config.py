@@ -1,0 +1,80 @@
+"""Runtime configuration and on-disk locations."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Where we keep the OAuth token cache and the credentials .env. Kept out of the
+# output directory so wiping a music folder never logs you out.
+APP_HOME = Path(os.environ.get("SPT2YT_HOME") or (Path.home() / ".spt2yt"))
+ENV_FILE = APP_HOME / "credentials.env"
+TOKEN_CACHE = APP_HOME / "spotify-token.json"
+# spotipy defaults its client-credentials cache to ".cache" in the working
+# directory, which drops a live access token into whatever folder the app was
+# started from -- the repo root, typically. Keep it with the other secrets.
+APP_TOKEN_CACHE = APP_HOME / "spotify-app-token.json"
+
+DEFAULT_OUTPUT = Path.home() / "Music" / "spt2yt"
+
+# Loopback only, and 127.0.0.1 rather than "localhost": Spotify rejects
+# http://localhost redirect URIs on apps created after April 2025.
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = int(os.environ.get("SPT2YT_PORT") or 8765)
+REDIRECT_PATH = "/callback"
+
+SCOPES = "playlist-read-private playlist-read-collaborative user-library-read"
+
+
+def redirect_uri(port: int = SERVER_PORT) -> str:
+    return f"http://{SERVER_HOST}:{port}{REDIRECT_PATH}"
+
+
+@dataclass
+class Settings:
+    client_id: str = ""
+    client_secret: str = ""
+    output_dir: Path = field(default_factory=lambda: DEFAULT_OUTPUT)
+    concurrency: int = 3
+    # Below this score a match is surfaced as "needs review" instead of being
+    # downloaded silently. Tuned against live/remix/karaoke false positives.
+    match_threshold: float = 70.0
+    skip_low_matches: bool = True
+
+    @property
+    def has_credentials(self) -> bool:
+        return bool(self.client_id and self.client_secret)
+
+
+def load_settings() -> Settings:
+    APP_HOME.mkdir(parents=True, exist_ok=True)
+    if ENV_FILE.exists():
+        load_dotenv(ENV_FILE, override=False)
+    load_dotenv(override=False)  # a project-local .env still wins over nothing
+
+    output = os.environ.get("SPT2YT_OUTPUT")
+    return Settings(
+        client_id=os.environ.get("SPOTIFY_CLIENT_ID", "").strip(),
+        client_secret=os.environ.get("SPOTIFY_CLIENT_SECRET", "").strip(),
+        output_dir=Path(output).expanduser() if output else DEFAULT_OUTPUT,
+        concurrency=int(os.environ.get("SPT2YT_CONCURRENCY") or 3),
+    )
+
+
+def save_credentials(client_id: str, client_secret: str) -> None:
+    """Persist credentials so the user only pastes them once."""
+    APP_HOME.mkdir(parents=True, exist_ok=True)
+    ENV_FILE.write_text(
+        f"SPOTIFY_CLIENT_ID={client_id.strip()}\n"
+        f"SPOTIFY_CLIENT_SECRET={client_secret.strip()}\n",
+        encoding="utf-8",
+    )
+    try:  # tighten perms where the platform supports it
+        ENV_FILE.chmod(0o600)
+    except OSError:
+        pass
+    os.environ["SPOTIFY_CLIENT_ID"] = client_id.strip()
+    os.environ["SPOTIFY_CLIENT_SECRET"] = client_secret.strip()

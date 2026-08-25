@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spt2yt</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#127925;</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">&#9835;</span>
+    <div>
+      <h1>spt2yt</h1>
+      <p class="tagline">Spotify playlists &rarr; offline Opus</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button id="folder-btn" class="ghost" title="Open the download folder">
+      <span id="folder-label">~/Music/spt2yt</span>
+    </button>
+    <button id="settings-btn" class="ghost icon" title="Settings">&#9881;</button>
+    <div id="account"></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- first-run credential setup -->
+  <section id="setup" class="card hidden">
+    <h2>One-time setup</h2>
+    <p class="muted">
+      Reading your playlists needs a free Spotify API app. Takes about two minutes,
+      and nothing here is sent anywhere except to Spotify.
+    </p>
+    <ol class="steps">
+      <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">Spotify Developer Dashboard</a> and click <b>Create app</b>.</li>
+      <li>Name it anything. For <b>Redirect URI</b> paste exactly:
+        <span class="copyrow"><code id="redirect-uri">&hellip;</code><button class="ghost tiny" data-copy="redirect-uri">copy</button></span>
+      </li>
+      <li>Tick <b>Web API</b>, save, then open <b>Settings</b> to reveal the client ID and secret.</li>
+    </ol>
+    <div class="field-row">
+      <label>Client ID<input id="client-id" type="text" spellcheck="false" placeholder="32 hex characters"></label>
+      <label>Client secret<input id="client-secret" type="password" spellcheck="false" placeholder="32 hex characters"></label>
+    </div>
+    <button id="save-creds" class="primary">Save credentials</button>
+  </section>
+
+  <!-- playlist loader -->
+  <section id="loader" class="card">
+    <div class="card-head">
+      <h2><span class="src-dot sp"></span>From Spotify</h2>
+      <span class="muted small">matched on YouTube Music</span>
+    </div>
+    <div class="loadrow">
+      <input id="playlist-url" type="text" spellcheck="false"
+             placeholder="https://open.spotify.com/playlist/…  (or an album link, or “liked”)">
+      <button id="load-btn" class="primary">Load</button>
+    </div>
+    <div id="signin-required" class="banner signin hidden">
+      <div class="signin-text">
+        <b>Sign in with Spotify to read playlists</b>
+        <p class="small muted">
+          Spotify requires a signed-in account to list playlist contents &mdash; public
+          playlists included, not just your own. Albums and single tracks work without it.
+        </p>
+        <p class="small muted">
+          Reusing a Spotify app from another project? Add
+          <span class="copyrow"><code id="redirect-uri-2">&hellip;</code><button class="ghost tiny" data-copy="redirect-uri-2">copy</button></span>
+          to its <b>Redirect URIs</b> first (Dashboard &rarr; your app &rarr; Settings &rarr;
+          Edit). Adding one is safe &mdash; the URIs your other project uses keep working.
+        </p>
+      </div>
+      <button id="signin-btn" class="primary">Sign in with Spotify</button>
+    </div>
+    <p class="hint" id="loader-hint">
+      Paste a playlist, album or track link &mdash; or type <code>liked</code> for your Liked Songs.
+    </p>
+    <div id="loader-error" class="banner error hidden"></div>
+  </section>
+
+  <!-- youtube loader -->
+  <section id="yt-loader" class="card">
+    <div class="card-head">
+      <h2><span class="src-dot yt"></span>From YouTube</h2>
+      <span class="muted small">no sign-in needed</span>
+    </div>
+    <div class="loadrow">
+      <input id="yt-url" type="text" spellcheck="false"
+             placeholder="https://www.youtube.com/playlist?list=…  or a video link">
+      <button id="yt-load-btn" class="primary">Load</button>
+    </div>
+    <p class="hint">
+      YouTube or YouTube&nbsp;Music, playlist or single video. Nothing is matched or
+      guessed here &mdash; the recording is already known, so it downloads exactly what
+      you linked.
+    </p>
+    <div id="yt-error" class="banner error hidden"></div>
+  </section>
+
+  <!-- playlist contents -->
+  <section id="playlist" class="hidden">
+    <div class="playlist-head card">
+      <img id="pl-cover" alt="" width="88" height="88">
+      <div class="pl-meta">
+        <span id="pl-kind" class="pill"></span>
+        <h2 id="pl-name"></h2>
+        <p id="pl-owner" class="muted"></p>
+        <div id="sync-summary" class="sync"></div>
+      </div>
+      <div class="pl-actions">
+        <div class="selectors">
+          <button class="ghost tiny" data-select="new">New only</button>
+          <button class="ghost tiny" data-select="all">All</button>
+          <button class="ghost tiny" data-select="none">None</button>
+        </div>
+        <button id="download-btn" class="primary big">Download</button>
+        <button id="cancel-btn" class="danger hidden">Stop</button>
+      </div>
+    </div>
+
+    <div id="job-banner" class="banner hidden"></div>
+    <div id="tracks" class="tracks"></div>
+  </section>
+
+</main>
+
+<!-- settings drawer -->
+<div id="settings-panel" class="drawer hidden">
+  <div class="drawer-inner card">
+    <h2>Settings</h2>
+    <label>Download folder
+      <input id="set-output" type="text" spellcheck="false">
+    </label>
+    <label>Parallel downloads
+      <input id="set-jobs" type="number" min="1" max="8">
+    </label>
+    <label>Match confidence threshold <span id="thr-value" class="muted"></span>
+      <input id="set-threshold" type="range" min="0" max="100" step="5">
+    </label>
+    <label class="checkline">
+      <input id="set-skip" type="checkbox">
+      <span>Hold low-confidence matches for review instead of downloading them</span>
+    </label>
+    <p class="muted small">
+      Higher threshold = fewer wrong versions slip through, more tracks parked for
+      review. 70 is a reasonable middle.
+    </p>
+    <div class="drawer-actions">
+      <button id="logout-btn" class="ghost">Sign out of Spotify</button>
+      <button id="settings-close" class="primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<template id="track-template">
+  <article class="track" data-status="pending">
+    <input type="checkbox" class="tsel" checked>
+    <span class="tnum"></span>
+    <img class="tart" alt="" width="40" height="40" loading="lazy">
+    <div class="tmain">
+      <div class="ttitle"></div>
+      <div class="tartist"></div>
+      <div class="tmatch"></div>
+    </div>
+    <div class="tright">
+      <div class="tstatus"></div>
+      <div class="tbar"><div class="tfill"></div></div>
+    </div>
+    <button class="ghost tiny tfix hidden">Fix match</button>
+  </article>
+</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
