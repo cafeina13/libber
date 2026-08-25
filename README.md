@@ -63,7 +63,10 @@ uv run libber --jobs 5           # more parallel downloads
 uv run libber --no-browser       # don't open a browser
 ```
 
-Downloads default to `~/Music/libber`, one folder per playlist.
+Downloads default to `~/Music/libber`, one folder per playlist. Change it in
+Settings and it sticks — the folder and your other preferences are saved to
+`~/.libber/settings.json`, so a restart keeps them. `--output` overrides for a
+single run without changing what's saved.
 
 ## One-time Spotify setup
 
@@ -159,6 +162,7 @@ walking down the ranked list if the top pick turns out to be unavailable.
 | --- | --- |
 | `~/Music/libber/` | Downloads, one folder per playlist |
 | `~/Music/libber/.libber/library.json` | What's downloaded, for cheap re-syncs |
+| `~/.libber/settings.json` | Download folder and preferences, kept across restarts |
 | `~/.libber/credentials.env` | Spotify client ID + secret |
 | `~/.libber/spotify-token.json` | OAuth token cache (your sign-in) |
 | `~/.libber/spotify-app-token.json` | App token cache |

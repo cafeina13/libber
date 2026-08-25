@@ -22,7 +22,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import config
-from .config import REDIRECT_PATH, Settings, load_settings, redirect_uri, save_credentials
+from .config import (
+    REDIRECT_PATH,
+    Settings,
+    load_settings,
+    redirect_uri,
+    save_credentials,
+    save_settings,
+)
 from .jobs import JobManager
 from .library import Library
 from .models import Playlist
@@ -153,6 +160,7 @@ async def update_settings(body: SettingsBody) -> dict[str, Any]:
         settings.skip_low_matches = body.skip_low_matches
     if body.enrich_youtube is not None:
         settings.enrich_youtube = body.enrich_youtube
+    save_settings(settings)   # survive a restart; losing output_dir is costly
     return await status()
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from libber import config
 from libber.config import Settings
 from libber.models import Playlist, Track
 from libber.server import app, state
@@ -20,7 +21,13 @@ from libber.youtube import YouTubeError
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    """A client on isolated state: temp output dir, no real credentials."""
+    """A client on isolated state: temp output dir, no real credentials.
+
+    The settings file is redirected too -- /api/settings persists to disk, so
+    without this a test run would overwrite the developer's real config.
+    """
+    monkeypatch.setattr(config, "APP_HOME", tmp_path / "home")
+    monkeypatch.setattr(config, "SETTINGS_FILE", tmp_path / "home" / "settings.json")
     monkeypatch.setattr(state, "settings", Settings(output_dir=tmp_path))
     monkeypatch.setattr(state, "_libraries", {})
     monkeypatch.setattr(state, "playlists", {})
