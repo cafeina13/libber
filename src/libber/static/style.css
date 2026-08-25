@@ -85,6 +85,13 @@ input[type=text], input[type=password], input[type=number] {
 }
 input:focus { outline: none; border-color: var(--accent); }
 input[type=range] { width: 100%; margin-top: 8px; accent-color: var(--accent); }
+.sep { border: none; border-top: 1px solid var(--line); margin: 18px 0 16px; }
+select {
+  width: 100%; margin-top: 5px; padding: 9px 11px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; font: inherit;
+}
+select:focus { outline: none; border-color: var(--accent); }
 .checkline { display: flex; align-items: flex-start; gap: 9px; color: var(--text); }
 .checkline input { margin-top: 3px; accent-color: var(--accent); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }

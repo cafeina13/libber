@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import enrich, matcher
-from .config import Settings
+from .config import Settings, cookie_option
 from .download import DownloadFailed, fetch_audio, target_path, write_tags
 from .library import Library, folder_for, write_m3u
 from .matcher import Candidate
@@ -326,7 +326,13 @@ class Job:
 
             destination = self._reserve_path(task)
             try:
-                result = fetch_audio(candidate, destination, report)
+                result = fetch_audio(
+                    candidate,
+                    destination,
+                    report,
+                    cookies=cookie_option(self.settings),
+                    sleep_between=self.settings.sleep_between,
+                )
             except DownloadFailed as exc:
                 last_error = str(exc)
                 continue

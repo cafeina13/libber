@@ -157,6 +157,24 @@
       Higher threshold = fewer wrong versions slip through, more tracks parked for
       review. 70 is a reasonable middle.
     </p>
+
+    <hr class="sep">
+    <label>Take cookies from
+      <select id="set-cookies"></select>
+    </label>
+    <p class="muted small">
+      YouTube answers anonymous requests with &ldquo;sign in to confirm you&rsquo;re not
+      a bot&rdquo;. Cookies from a browser you&rsquo;re signed into on this machine get
+      past that. They&rsquo;re read locally and never sent anywhere but YouTube.
+    </p>
+    <label>Pause between downloads <span id="sleep-value" class="muted"></span>
+      <input id="set-sleep" type="range" min="0" max="10" step="0.5">
+    </label>
+    <p class="muted small">
+      Downloading a long playlist flat out is what gets a connection blocked.
+      A second or two between tracks, with fewer in parallel, keeps you under
+      the radar on big runs.
+    </p>
     <div class="drawer-actions">
       <button id="logout-btn" class="ghost">Sign out of Spotify</button>
       <button id="settings-close" class="primary">Done</button>

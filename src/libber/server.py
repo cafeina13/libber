@@ -103,6 +103,9 @@ class SettingsBody(BaseModel):
     match_threshold: float | None = None
     skip_low_matches: bool | None = None
     enrich_youtube: bool | None = None
+    cookies_browser: str | None = None
+    cookies_profile: str | None = None
+    sleep_between: float | None = None
 
 
 # --------------------------------------------------------------------------
@@ -127,8 +130,54 @@ async def status() -> dict[str, Any]:
             "match_threshold": settings.match_threshold,
             "skip_low_matches": settings.skip_low_matches,
             "enrich_youtube": settings.enrich_youtube,
+            "cookies_browser": settings.cookies_browser,
+            "cookies_profile": settings.cookies_profile,
+            "sleep_between": settings.sleep_between,
         },
+        "browsers": detect_browsers(),
     }
+
+
+def detect_browsers() -> list[dict[str, str]]:
+    """Browsers whose cookie stores are actually present on this machine.
+
+    Firefox forks are listed with their profile path because yt-dlp only knows
+    the name "firefox" and cannot find Zen, LibreWolf or Waterfox on its own.
+    """
+    home = Path.home()
+    appdata = Path(os.environ.get("APPDATA") or home / "AppData/Roaming")
+    local = Path(os.environ.get("LOCALAPPDATA") or home / "AppData/Local")
+
+    found: list[dict[str, str]] = []
+    for name, root in (
+        ("chrome", local / "Google/Chrome/User Data"),
+        ("edge", local / "Microsoft/Edge/User Data"),
+        ("brave", local / "BraveSoftware/Brave-Browser/User Data"),
+        ("vivaldi", local / "Vivaldi/User Data"),
+        ("chromium", local / "Chromium/User Data"),
+    ):
+        if root.exists():
+            found.append({"browser": name, "profile": "", "label": name})
+
+    # Firefox and its forks: locate the profile holding cookies.sqlite.
+    for label, root in (
+        ("firefox", appdata / "Mozilla/Firefox/Profiles"),
+        ("zen", appdata / "zen/Profiles"),
+        ("librewolf", appdata / "librewolf/Profiles"),
+        ("waterfox", appdata / "Waterfox/Profiles"),
+    ):
+        if not root.exists():
+            continue
+        profiles = [p for p in root.iterdir() if (p / "cookies.sqlite").exists()]
+        if not profiles:
+            continue
+        newest = max(profiles, key=lambda p: (p / "cookies.sqlite").stat().st_mtime)
+        found.append({
+            "browser": "firefox",
+            "profile": "" if label == "firefox" else str(newest),
+            "label": label,
+        })
+    return found
 
 
 @app.post("/api/credentials")
@@ -160,6 +209,12 @@ async def update_settings(body: SettingsBody) -> dict[str, Any]:
         settings.skip_low_matches = body.skip_low_matches
     if body.enrich_youtube is not None:
         settings.enrich_youtube = body.enrich_youtube
+    if body.cookies_browser is not None:
+        settings.cookies_browser = body.cookies_browser.strip()
+    if body.cookies_profile is not None:
+        settings.cookies_profile = body.cookies_profile.strip()
+    if body.sleep_between is not None:
+        settings.sleep_between = max(0.0, min(30.0, body.sleep_between))
     save_settings(settings)   # survive a restart; losing output_dir is costly
     return await status()
 

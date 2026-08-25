@@ -51,6 +51,16 @@ class Settings:
     # YouTube gives no album, date or ISRC and only 16:9 artwork. Look the
     # recording up on Spotify (or YouTube Music) to fill those in.
     enrich_youtube: bool = True
+    # YouTube now answers anonymous requests with "Sign in to confirm you're
+    # not a bot", so cookies from a signed-in browser are effectively required.
+    # Firefox forks (Zen, LibreWolf, Waterfox) work as "firefox" plus the path
+    # to their profile, which yt-dlp cannot discover on its own.
+    cookies_browser: str = ""
+    cookies_profile: str = ""
+    # Downloading a long playlist flat out is what triggers the block in the
+    # first place. A short random gap between tracks costs little and looks far
+    # less like a scraper.
+    sleep_between: float = 1.0
 
     @property
     def has_credentials(self) -> bool:
@@ -58,7 +68,16 @@ class Settings:
 
 
 PERSISTED = ("output_dir", "concurrency", "match_threshold", "skip_low_matches",
-             "enrich_youtube")
+             "enrich_youtube", "cookies_browser", "cookies_profile", "sleep_between")
+
+
+def cookie_option(settings: Settings) -> tuple | None:
+    """yt-dlp's `cookiesfrombrowser` tuple, or None when unconfigured."""
+    if not settings.cookies_browser:
+        return None
+    if settings.cookies_profile:
+        return (settings.cookies_browser, settings.cookies_profile)
+    return (settings.cookies_browser,)
 
 
 def _read_saved() -> dict:
@@ -86,6 +105,9 @@ def save_settings(settings: Settings) -> None:
         "match_threshold": settings.match_threshold,
         "skip_low_matches": settings.skip_low_matches,
         "enrich_youtube": settings.enrich_youtube,
+        "cookies_browser": settings.cookies_browser,
+        "cookies_profile": settings.cookies_profile,
+        "sleep_between": settings.sleep_between,
     }
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, indent=1), encoding="utf-8")
@@ -111,7 +133,8 @@ def load_settings() -> Settings:
 
     if saved.get("output_dir"):
         settings.output_dir = Path(str(saved["output_dir"])).expanduser()
-    for key in ("concurrency", "match_threshold", "skip_low_matches", "enrich_youtube"):
+    for key in ("concurrency", "match_threshold", "skip_low_matches", "enrich_youtube",
+                "cookies_browser", "cookies_profile", "sleep_between"):
         if key in saved and saved[key] is not None:
             setattr(settings, key, type(getattr(settings, key))(saved[key]))
 

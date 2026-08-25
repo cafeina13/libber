@@ -65,8 +65,13 @@ class Result:
     duration_s: float
 
 
-def _ydl_opts(tmp: Path, hook) -> dict:
-    return {
+def _ydl_opts(
+    tmp: Path,
+    hook,
+    cookies: tuple | None = None,
+    sleep_between: float = 0.0,
+) -> dict:
+    opts: dict = {
         # Prefer a native Opus stream so the extract step can copy rather than
         # transcode. The fallbacks only matter for oddball uploads.
         "format": "bestaudio[acodec=opus]/bestaudio/best",
@@ -85,10 +90,23 @@ def _ydl_opts(tmp: Path, hook) -> dict:
         "progress_hooks": [hook],
         "ignoreerrors": False,
     }
+    if cookies:
+        # Anonymous requests now get "Sign in to confirm you're not a bot".
+        opts["cookiesfrombrowser"] = cookies
+    if sleep_between > 0:
+        # Randomised so a long playlist doesn't produce a machine-perfect
+        # request cadence, which is itself a signal.
+        opts["sleep_interval"] = sleep_between
+        opts["max_sleep_interval"] = sleep_between * 3
+    return opts
 
 
 def fetch_audio(
-    candidate: Candidate, dest: Path, on_progress: ProgressFn | None = None
+    candidate: Candidate,
+    dest: Path,
+    on_progress: ProgressFn | None = None,
+    cookies: tuple | None = None,
+    sleep_between: float = 0.0,
 ) -> Result:
     """Download one candidate to `dest`, replacing anything already there."""
 
@@ -108,7 +126,7 @@ def fetch_audio(
     with tempfile.TemporaryDirectory(prefix="libber-") as raw_tmp:
         tmp = Path(raw_tmp)
         try:
-            with YoutubeDL(_ydl_opts(tmp, hook)) as ydl:
+            with YoutubeDL(_ydl_opts(tmp, hook, cookies, sleep_between)) as ydl:
                 info = ydl.extract_info(candidate.url, download=True)
         except DownloadError as exc:
             raise DownloadFailed(_tidy_error(str(exc))) from exc
@@ -143,8 +161,18 @@ def _tidy_error(message: str) -> str:
         return "That YouTube video is unavailable (often region-locked)."
     if "sign in to confirm your age" in lowered:
         return "Age-restricted video; needs a signed-in session to fetch."
-    if "sign in to confirm" in lowered:
-        return "YouTube asked for sign-in verification on this one."
+    if "not a bot" in lowered or "sign in to confirm" in lowered:
+        # Not about this video: YouTube has rate-limited the whole connection.
+        return (
+            "YouTube is blocking this connection as automated traffic — it "
+            "affects every track, not just this one. Set a cookies browser in "
+            "Settings, lower the parallel downloads, and give it a few hours."
+        )
+    if "page needs to be reloaded" in lowered or "player response" in lowered:
+        return (
+            "YouTube refused to serve this track's audio. Usually the same "
+            "rate limit as the bot check; waiting it out clears it."
+        )
     return text.splitlines()[0][:200] if text else "Download failed."
 
 

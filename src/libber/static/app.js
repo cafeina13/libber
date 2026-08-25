@@ -68,6 +68,25 @@ async function refreshStatus() {
   $("thr-value").textContent = s.settings.match_threshold;
   $("set-skip").checked = s.settings.skip_low_matches;
   $("set-enrich").checked = s.settings.enrich_youtube;
+  $("set-sleep").value = s.settings.sleep_between;
+  $("sleep-value").textContent = `${s.settings.sleep_between}s`;
+
+  // Only browsers actually installed here are offered; a Firefox fork carries
+  // its profile path because yt-dlp can't locate it by name.
+  const select = $("set-cookies");
+  const current = `${s.settings.cookies_browser}|${s.settings.cookies_profile}`;
+  select.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "|";
+  none.textContent = "none (likely to hit the bot check)";
+  select.appendChild(none);
+  (s.browsers || []).forEach((b) => {
+    const opt = document.createElement("option");
+    opt.value = `${b.browser}|${b.profile}`;
+    opt.textContent = b.label;
+    select.appendChild(opt);
+  });
+  select.value = [...select.options].some((o) => o.value === current) ? current : "|";
 
   const account = $("account");
   if (s.user) {
@@ -473,6 +492,9 @@ $("settings-close").onclick = async () => {
         match_threshold: Number($("set-threshold").value),
         skip_low_matches: $("set-skip").checked,
         enrich_youtube: $("set-enrich").checked,
+        cookies_browser: $("set-cookies").value.split("|")[0],
+        cookies_profile: $("set-cookies").value.split("|").slice(1).join("|"),
+        sleep_between: Number($("set-sleep").value),
       },
     });
     await refreshStatus();
@@ -483,6 +505,7 @@ $("settings-close").onclick = async () => {
   $("settings-panel").classList.add("hidden");
 };
 $("set-threshold").addEventListener("input", (e) => { $("thr-value").textContent = e.target.value; });
+$("set-sleep").addEventListener("input", (e) => { $("sleep-value").textContent = `${e.target.value}s`; });
 $("settings-panel").addEventListener("click", (e) => {
   if (e.target.id === "settings-panel") $("settings-panel").classList.add("hidden");
 });

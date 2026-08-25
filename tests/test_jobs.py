@@ -48,7 +48,7 @@ def stub_download(monkeypatch):
     """Replace the real download with one that just writes a file."""
     calls = []
 
-    def fake(cand, dest, on_progress=None):
+    def fake(cand, dest, on_progress=None, **kwargs):
         calls.append((cand.video_id, dest))
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(b"fake opus audio")
@@ -163,7 +163,7 @@ class TestFallbackDownload:
         pl = playlist(1)
         attempts = []
 
-        def flaky(cand, dest, on_progress=None):
+        def flaky(cand, dest, on_progress=None, **kwargs):
             attempts.append(cand.video_id)
             if cand.video_id == "bad":
                 raise DownloadFailed("video unavailable")
@@ -189,7 +189,7 @@ class TestFallbackDownload:
 
         pl = playlist(1)
 
-        def always_fail(cand, dest, on_progress=None):
+        def always_fail(cand, dest, on_progress=None, **kwargs):
             raise DownloadFailed("nope")
 
         monkeypatch.setattr("libber.jobs.fetch_audio", always_fail)

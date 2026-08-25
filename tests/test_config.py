@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from libber import config
-from libber.config import Settings, load_settings, save_settings
+from libber.config import Settings, cookie_option, load_settings, save_settings
 
 
 @pytest.fixture
@@ -73,6 +73,35 @@ class TestRoundTrip:
         s = load_settings()
         assert isinstance(s.concurrency, int)
         assert isinstance(s.match_threshold, float)
+
+
+class TestCookieOption:
+    """YouTube blocks anonymous requests, so cookies are effectively required.
+    Firefox forks need an explicit profile path -- yt-dlp only knows the name
+    "firefox" and cannot find Zen, LibreWolf or Waterfox by itself."""
+
+    def test_none_when_unset(self):
+        assert cookie_option(Settings()) is None
+
+    def test_browser_only(self):
+        assert cookie_option(Settings(cookies_browser="edge")) == ("edge",)
+
+    def test_browser_with_profile(self):
+        zen = r"C:\Users\x\AppData\Roaming\zen\Profiles\abc.Default (alpha)"
+        assert cookie_option(
+            Settings(cookies_browser="firefox", cookies_profile=zen)
+        ) == ("firefox", zen)
+
+    def test_profile_without_browser_is_ignored(self):
+        assert cookie_option(Settings(cookies_profile="/some/path")) is None
+
+    def test_survives_a_reload(self, isolated):
+        zen = r"C:\Users\x\AppData\Roaming\zen\Profiles\abc.Default (alpha)"
+        save_settings(Settings(cookies_browser="firefox", cookies_profile=zen,
+                               sleep_between=2.5))
+        s = load_settings()
+        assert cookie_option(s) == ("firefox", zen)
+        assert s.sleep_between == 2.5
 
 
 class TestResilience:
