@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from libber.config import SCOPES
 from libber.spotify import SpotifyError, _pick_cover, parse_source
 
 PID = "37i9dQZF1DXcBWIGoYBM5M"
@@ -58,6 +59,30 @@ class TestParseSource:
     def test_error_message_is_actionable(self):
         with pytest.raises(SpotifyError, match="open.spotify.com"):
             parse_source("garbage")
+
+
+class TestScopes:
+    """The README tells people exactly what signing in permits. These keep that
+    claim true: adding a scope that grants more should fail here first."""
+
+    def test_every_scope_is_read_only(self):
+        for scope in SCOPES.split():
+            assert "read" in scope, f"{scope} is not a read scope"
+
+    @pytest.mark.parametrize(
+        "capability",
+        ["modify", "playback", "follow", "user-read-email", "user-read-private",
+         "user-top-read", "user-read-recently-played", "streaming", "upload"],
+    )
+    def test_does_not_ask_for_more(self, capability):
+        assert capability not in SCOPES
+
+    def test_asks_for_exactly_what_it_needs(self):
+        assert set(SCOPES.split()) == {
+            "playlist-read-private",        # your own private playlists
+            "playlist-read-collaborative",  # collaborative ones you're in
+            "user-library-read",            # Liked Songs
+        }
 
 
 class TestPickCover:

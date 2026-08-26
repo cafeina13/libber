@@ -73,6 +73,25 @@
           to its <b>Redirect URIs</b> first (Dashboard &rarr; your app &rarr; Settings &rarr;
           Edit). Adding one is safe &mdash; the URIs your other project uses keep working.
         </p>
+        <details class="scopes">
+          <summary>What this lets libber do</summary>
+          <p class="small muted">
+            You sign in on Spotify&rsquo;s own page &mdash; libber never sees your
+            password. The app is yours, so the token is issued to you and goes
+            nowhere but your machine.
+          </p>
+          <p class="small muted">It asks for three read-only scopes:</p>
+          <ul class="small muted">
+            <li><code>playlist-read-private</code> &mdash; read your private playlists</li>
+            <li><code>playlist-read-collaborative</code> &mdash; read collaborative ones</li>
+            <li><code>user-library-read</code> &mdash; read your Liked Songs</li>
+          </ul>
+          <p class="small muted">
+            It cannot change or delete playlists, touch your Liked Songs, control
+            playback, or see your email or subscription. Revoke any time at
+            <a href="https://www.spotify.com/account/apps/" target="_blank" rel="noreferrer">spotify.com/account/apps</a>.
+          </p>
+        </details>
       </div>
       <button id="signin-btn" class="primary">Sign in with Spotify</button>
     </div>

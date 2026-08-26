@@ -105,6 +105,48 @@ on first run, but for reference:
 Credentials are stored in `~/.libber/credentials.env` and never leave your
 machine except to talk to Spotify.
 
+### What signing in actually gives libber
+
+Being asked to sign in to Spotify by a program you just cloned deserves
+suspicion, so here is exactly what it does and what it cannot do.
+
+**You are not giving libber your password.** The sign-in happens on Spotify's
+own page at `accounts.spotify.com`. libber opens it, Spotify hands back a token
+for the redirect URI on `127.0.0.1`, and that token is cached in
+`~/.libber/spotify-token.json`. Your password is never typed into libber and
+never seen by it.
+
+**There is no third party.** You create your own Spotify app, so the client ID
+and secret are yours and the token is issued to *you*. Nothing is sent to the
+author of this project or to any server other than Spotify's. All of it runs on
+your machine, on loopback.
+
+**Three scopes are requested, all read-only:**
+
+| Scope | Lets libber |
+| --- | --- |
+| `playlist-read-private` | read your private playlists |
+| `playlist-read-collaborative` | read collaborative playlists you're part of |
+| `user-library-read` | read your Liked Songs |
+
+That is the whole list — check `SCOPES` in `config.py`, and the calls in
+`spotify.py`, which are all reads.
+
+**What it therefore cannot do**, because the scopes don't exist in the grant:
+
+- create, rename, reorder, or delete any playlist
+- add or remove tracks, including from Liked Songs
+- start, stop, or control playback on any device
+- see your email address or your subscription tier — `user-read-email` and
+  `user-read-private` aren't requested, which is why libber only ever shows
+  your display name
+- follow or unfollow anything, or read your listening history
+
+**Revoke it whenever you like** at
+[spotify.com/account/apps](https://www.spotify.com/account/apps/) — the app is
+yours, so you can also delete it outright in the developer dashboard. Deleting
+`~/.libber/` removes the cached token locally.
+
 ### You also need to sign in
 
 Client ID and secret alone are not enough for playlists. Spotify requires user
