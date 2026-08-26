@@ -169,6 +169,12 @@ class Candidate:
         }
 
 
+# Below this, two same-script titles are different songs, whatever else agrees.
+# Genuine matches clear it easily: remaster and "(feat. …)" noise is stripped
+# before comparing, so real pairs land at or near 100.
+TITLE_FLOOR = 60.0
+
+
 def _duration_score(delta: float) -> float:
     """Full marks within 2s, nothing past 15s. Duration is the honest signal."""
     delta = abs(delta)
@@ -181,10 +187,12 @@ def _duration_score(delta: float) -> float:
 
 def score(track: Track, cand: Candidate) -> Candidate:
     q_title, c_title = normalise(track.title), normalise(cand.title)
-    title_score = max(
-        fuzz.token_set_ratio(q_title, c_title),
-        fuzz.partial_ratio(q_title, c_title) * 0.95,
-    )
+    # token_set_ratio only. partial_ratio was also consulted, which scores the
+    # best-matching character window and so reads incidental overlap between
+    # two short unrelated titles as similarity -- "Seni Yazdim" against "Her
+    # Seye Ragmen" came out at 42 rather than 31. It never helped: a title with
+    # extra words is already handled by comparing token sets.
+    title_score = float(fuzz.token_set_ratio(q_title, c_title))
 
     q_artists = [normalise(a) for a in track.artists] or [""]
     c_artists = [normalise(a) for a in cand.artists] or [normalise(cand.title)]
@@ -212,6 +220,23 @@ def score(track: Track, cand: Candidate) -> Candidate:
     src_variants = variants_in(track.title) | variants_in(track.album)
     cand_variants = variants_in(cand.title) | variants_in(cand.album)
     risky = False
+
+    # The title is the only signal that establishes *which song* this is.
+    # Artist and duration agree for every other track on the same album, and
+    # together they are worth 58 of the 100 points -- so without this a
+    # different song by the right artist at the right length scored 74.8 and
+    # sailed past the default threshold. No amount of agreement elsewhere makes
+    # one title into another.
+    if not comparable([track.title], [cand.title]):
+        # Romanised against native script: unreadable rather than wrong, so
+        # hand it to a human instead of guessing either way.
+        flags.append("title in another script — not compared")
+        risky = True
+    elif title_score < TITLE_FLOOR:
+        total -= 30
+        flags.append("different title")
+        risky = True
+
     for key in cand_variants - src_variants:
         total -= 26
         flags.append(_LABELS[key])

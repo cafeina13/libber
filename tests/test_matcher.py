@@ -75,6 +75,89 @@ class TestVariantDetection:
         assert "live" not in variants_in("Delivery Man")
 
 
+class TestTitleFloor:
+    """A different song by the right artist used to pass.
+
+    Mary Jane's "Seni Yazdim" matched Mary Jane's "Her Seye Ragmen" at 74.8,
+    clearing the default threshold of 70. Artist and duration agree for every
+    other track on the same album and are worth 58 points between them, so the
+    title carried almost no veto. Only the title says *which song* this is.
+    """
+
+    def test_the_case_that_shipped(self, track):
+        t = track(title="Seni Yazdım", artists=["Mary Jane"], duration_ms=200_000)
+        result = score(t, cand("Her Şeye Rağmen", ["Mary Jane"], 200))
+        assert result.risky                     # parked at any threshold
+        assert "different title" in result.flags
+        assert result.score < 70
+
+    @pytest.mark.parametrize(
+        "wanted, got",
+        [
+            ("Bak", "Olsun"),
+            ("Berrak", "Haram Geceler"),
+            ("Chokehold", "Granite"),
+            ("Idioteque", "The National Anthem"),
+        ],
+    )
+    def test_other_tracks_by_the_same_artist_are_refused(self, track, wanted, got):
+        """Same artist, plausible length -- the everyday failure this guards."""
+        t = track(title=wanted, artists=["Same Artist"], duration_ms=200_000)
+        result = score(t, cand(got, ["Same Artist"], 200))
+        assert result.risky
+        assert "different title" in result.flags
+
+    def test_risky_regardless_of_score(self, track):
+        """The point of the flag: a wrong title is held even when everything
+        else is perfect, so the default threshold protects people too."""
+        t = track(title="One Song", artists=["Artist"], album="Al", duration_ms=200_000)
+        result = score(t, cand("Totally Different", ["Artist"], 200, album="Al"))
+        assert result.risky
+
+    @pytest.mark.parametrize(
+        "wanted, got",
+        [
+            ("Chokehold", "Chokehold"),
+            ("Teardrop", "Teardrop (feat. Elizabeth Fraser)"),
+            ("Bohemian Rhapsody", "Bohemian Rhapsody - 2011 Remaster"),
+            ("Kingslayer", "Kingslayer (feat. BABYMETAL)"),
+            ("Seni Yazdım", "Seni Yazdım"),
+        ],
+    )
+    def test_real_matches_are_untouched(self, track, wanted, got):
+        t = track(title=wanted, artists=["Artist"], duration_ms=200_000)
+        result = score(t, cand(got, ["Artist"], 200))
+        assert "different title" not in result.flags
+        assert not result.risky
+
+    def test_titles_in_different_scripts_are_not_judged(self, track):
+        """Romanised against native script is unreadable, not wrong -- so it
+        goes to a human rather than being scored as a mismatch."""
+        t = track(title="Kuusou Mesorogiwi", artists=["Yousei Teikoku"],
+                  duration_ms=243_000)
+        result = score(t, cand("空想メソロギヰ", ["妖精帝國"], 240))
+        assert "different title" not in result.flags
+        assert result.risky                      # held for review instead
+        assert any("another script" in f for f in result.flags)
+
+
+class TestTitleScoring:
+    """partial_ratio used to be consulted alongside token_set_ratio. It scores
+    the best-matching character window, so two short unrelated titles picked up
+    incidental overlap -- and it never helped, because token comparison already
+    covers a title with extra words."""
+
+    def test_extra_words_still_match(self, track):
+        t = track(title="Teardrop", artists=["Massive Attack"], duration_ms=330_000)
+        assert score(t, cand("Teardrop (feat. Elizabeth Fraser)",
+                             ["Massive Attack"], 331)).score >= 95
+
+    def test_unrelated_short_titles_score_low(self, track):
+        t = track(title="Seni Yazdım", artists=["Mary Jane"], duration_ms=200_000)
+        # Was inflated to 40 by the character-window comparison.
+        assert score(t, cand("Her Şeye Rağmen", ["Mary Jane"], 200)).score < 50
+
+
 class TestCrossScriptArtists:
     """Spotify romanises artists that YouTube Music leaves in their native
     script. "Yousei Teikoku" and "妖精帝國" share no characters, so fuzzy

@@ -213,6 +213,10 @@ Then the penalties, which are what actually catch bad matches:
   "Bohemian Rhapsody" outranks Queen's.
 - **Wildly wrong length** — under 85% or over 125% of the expected runtime is an
   excerpt, a full-album upload, or an extended mix, not the track.
+- **A different title** — the title is the only signal that says *which* song
+  this is. Artist and duration agree for every other track on the same album,
+  so a same-script title that doesn't match is held no matter how well
+  everything else scores.
 
 Artists written in **different scripts are not compared at all**. Spotify
 romanises names that YouTube Music leaves in their own script, so `Yousei
