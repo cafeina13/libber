@@ -14,7 +14,7 @@ import pytest
 from libber.config import Settings
 from libber.download import Result, target_path
 from libber.jobs import DONE, ERROR, EXISTS, REVIEW, Job, _direct_candidate
-from libber.library import Library
+from libber.library import Library, folder_for, write_m3u
 from libber.matcher import Candidate
 from libber.models import Playlist, Track
 
@@ -404,6 +404,79 @@ class TestExplicitUpgrade:
         job._process(job.tasks[pl.tracks[0].id])
         assert job.tasks[pl.tracks[0].id].status == EXISTS
         assert calls == []
+
+
+class TestUpgradingABorrowedTrack:
+    """Upgrading a track whose file lives in another playlist's folder.
+
+    A recording is downloaded once and shared, so the file backing a track in
+    this playlist may sit under a different one. The upgrade has to follow the
+    file rather than the folder being worked on, or it writes a second copy
+    into this folder and leaves the original -- still the lesser version --
+    referenced by everything else.
+    """
+
+    def _setup(self, tmp_path, monkeypatch, bitrate=260):
+        shared = Track(id="a" * 22, title="Shared Song", artists=["Artist"],
+                       album="Al", duration_ms=200_000)
+        first = Playlist(id="A", kind="playlist", name="Playlist A", tracks=[shared])
+        second = Playlist(id="B", kind="playlist", name="Playlist B", tracks=[shared])
+
+        library = Library(tmp_path)
+        folder_a = folder_for(tmp_path, first)
+        folder_a.mkdir(parents=True)
+        file_a = folder_a / "Artist - Shared Song.opus"
+        file_a.write_bytes(b"old")
+        library.record(shared, file_a, "vid1", "t", "a", 100.0, bitrate=130)
+
+        def fake(cand, dest, on_progress=None, **kw):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"new")
+            return Result(path=dest, video_id=cand.video_id, bitrate=bitrate,
+                          duration_s=200.0)
+
+        monkeypatch.setattr("libber.jobs.fetch_audio", fake)
+        monkeypatch.setattr("libber.jobs.write_tags", lambda *a, **k: None)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="vid1", score=99.0)])
+
+        job = Job(second, [shared.id], Settings(output_dir=tmp_path, audio_quality="high"),
+                  library, asyncio.new_event_loop(), upgrade=True)
+        return job, shared, file_a
+
+    def test_replaces_the_file_where_it_actually_lives(self, tmp_path, monkeypatch):
+        job, shared, file_a = self._setup(tmp_path, monkeypatch)
+        job._process(job.tasks[shared.id])
+
+        assert job.tasks[shared.id].status == DONE
+        assert file_a.read_bytes() == b"new"          # upgraded in place
+        assert list(tmp_path.rglob("*.opus")) == [file_a]   # no copy in folder B
+
+    def test_the_entry_follows_the_upgrade(self, tmp_path, monkeypatch):
+        job, shared, file_a = self._setup(tmp_path, monkeypatch)
+        job._process(job.tasks[shared.id])
+        entry = job.library.entry(shared.id)
+        assert entry.bitrate == 260
+        assert entry.file == file_a.relative_to(tmp_path).as_posix()
+
+    def test_this_playlist_still_points_at_it(self, tmp_path, monkeypatch):
+        """The borrowing playlist keeps a working relative reference."""
+        job, shared, file_a = self._setup(tmp_path, monkeypatch)
+        job._process(job.tasks[shared.id])
+        m3u = write_m3u(job.folder, job.playlist, job.library)
+        entries = [l for l in m3u.read_text(encoding="utf-8").splitlines()
+                   if l and not l.startswith("#")]
+        assert entries == ["../Playlist A/Artist - Shared Song.opus"]
+        assert (m3u.parent / entries[0]).exists()
+
+    def test_a_borrowed_file_that_is_gone_downloads_here_instead(self, tmp_path, monkeypatch):
+        """If the other playlist's folder was deleted, there is nothing to
+        upgrade -- it is simply a new download into this one."""
+        job, shared, file_a = self._setup(tmp_path, monkeypatch)
+        file_a.unlink()
+        job._process(job.tasks[shared.id])
+        assert job.tasks[shared.id].status == DONE
+        assert (job.folder / "Artist - Shared Song.opus").exists()
 
 
 class TestFilenameReservation:
