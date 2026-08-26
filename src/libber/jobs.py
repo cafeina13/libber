@@ -37,6 +37,23 @@ def _direct_candidate(track: Track) -> Candidate:
     )
 
 
+# Phrases the downloader produces when YouTube is refusing the connection
+# rather than objecting to one video. Those failures repeat for every track, so
+# they are worth reacting to differently.
+_RATE_LIMITED = ("blocking this connection", "refused to serve", "not a bot")
+
+
+def _looks_rate_limited(message: str) -> bool:
+    low = (message or "").lower()
+    return any(hint in low for hint in _RATE_LIMITED)
+
+
+# A run left unattended must not keep hammering a service that has started
+# refusing it: that deepens the block and buries the cause under hundreds of
+# identical failures.
+STOP_AFTER_FAILURES = 5
+STOP_AFTER_RATE_LIMITED = 3
+
 PENDING = "pending"
 MATCHING = "matching"
 REVIEW = "needs_review"
@@ -103,6 +120,8 @@ class Job:
         self._subscribers: list[asyncio.Queue] = []
         self._lock = threading.Lock()
         self._claimed: set[Path] = set()
+        self._failures = 0          # consecutive; any success resets it
+        self.stopped_early = ""
 
         wanted = set(track_ids)
         self.tasks: dict[str, Task] = {}
@@ -181,6 +200,7 @@ class Job:
                 "summary": summary,
                 "folder": str(self.folder),
                 "m3u": str(m3u) if m3u else None,
+                "stopped_early": self.stopped_early,
             },
         )
 
@@ -199,6 +219,7 @@ class Job:
                 task.progress = 1.0
                 task.path = self.library.root / existing.file
                 task.message = "already downloaded"
+                self._note_success()
                 self._push(task)
                 return
             # Asked for explicitly: fetch the better stream over the same file.
@@ -219,12 +240,14 @@ class Job:
         except Exception as exc:
             task.status = ERROR
             task.message = f"YouTube Music search failed: {exc}"
+            self._note_failure(task.message)
             self._push(task)
             return
 
         if not task.candidates:
             task.status = ERROR
             task.message = "No results on YouTube Music."
+            self._note_failure(task.message)
             self._push(task)
             return
 
@@ -266,6 +289,29 @@ class Job:
         if not found:
             found = enrich.from_youtube(task.track)
         task.message = f"album: {found}" if found else ""
+
+    def _note_success(self) -> None:
+        with self._lock:
+            self._failures = 0
+
+    def _note_failure(self, message: str) -> None:
+        """Give up on the whole run once failures stop looking incidental."""
+        limit = STOP_AFTER_RATE_LIMITED if _looks_rate_limited(message) else STOP_AFTER_FAILURES
+        with self._lock:
+            self._failures += 1
+            trip = self._failures >= limit and not self.cancelled.is_set()
+            count = self._failures
+        if not trip:
+            return
+        self.cancelled.set()
+        self.stopped_early = (
+            f"Stopped after {count} failures in a row — "
+            + ("YouTube is refusing this connection. Leave it a few hours, then "
+               "carry on; nothing already downloaded is lost."
+               if _looks_rate_limited(message)
+               else f"last error: {message}")
+        )
+        self.emit("warning", {"message": self.stopped_early})
 
     def _park(self, task: Task, best: Candidate, message: str) -> None:
         """Hold a track for review, and write the queue to disk.
@@ -334,6 +380,7 @@ class Job:
                 task.path = path
                 task.chosen = candidate
                 task.message = "same recording as another track — reused"
+                self._note_success()
                 self._push(task)
                 return
 
@@ -371,6 +418,8 @@ class Job:
                 )
             except DownloadFailed as exc:
                 last_error = str(exc)
+                if _looks_rate_limited(last_error):
+                    break      # the next candidate fails identically
                 continue
             except Exception as exc:  # network blips, ffmpeg trouble
                 last_error = str(exc)
@@ -397,11 +446,13 @@ class Job:
             task.progress = 1.0
             task.path = result.path
             task.message = f"{result.bitrate:.0f} kbps opus" if result.bitrate else "opus"
+            self._note_success()
             self._push(task)
             return
 
         task.status = ERROR
         task.message = last_error or "Every candidate failed to download."
+        self._note_failure(task.message)
         self._push(task)
 
     def retry(self, track_id: str, video_id: str, pool: ThreadPoolExecutor) -> bool:

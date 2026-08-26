@@ -356,6 +356,13 @@ Two things help, both in Settings:
 
 If you're already blocked, neither fixes it retroactively. Wait a few hours.
 
+A run stops itself rather than working through the rest of the playlist: three
+failures in a row that look like a refused connection, or five of any kind, and
+it gives up and says why. Leaving a long run unattended shouldn't mean coming
+back to hundreds of identical failures against a service that started saying no
+early on. Nothing is lost — the library resumes where it stopped, and the
+review queue is on disk.
+
 > ### Use a spare Google account for cookies
 >
 > Cookies from a signed-in browser attach every download to that Google

@@ -509,8 +509,14 @@ function finishJob(data) {
   if (s.needs_review) bits.push(`${s.needs_review} need review`);
   if (s.error) bits.push(`${s.error} failed`);
 
-  const kind = s.error || s.needs_review ? "" : "ok";
+  const kind = s.error || s.needs_review || data.stopped_early ? "" : "ok";
   let text = bits.length ? bits.join(" · ") : "Nothing to do";
+  if (data.stopped_early) {
+    banner($("job-banner"), data.stopped_early, "error");
+    $("cancel-btn").classList.add("hidden");
+    updateDownloadButton();
+    return;
+  }
   if (data.m3u) text += " — .m3u8 written";
   banner($("job-banner"), `${text}. Saved to ${data.folder}`, kind);
 

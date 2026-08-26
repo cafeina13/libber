@@ -13,7 +13,8 @@ import pytest
 
 from libber.config import Settings
 from libber.download import Result, target_path
-from libber.jobs import DONE, ERROR, EXISTS, REVIEW, Job, _direct_candidate
+from libber.jobs import (CANCELLED, DONE, ERROR, EXISTS, REVIEW, Job,
+                         _direct_candidate)
 from libber.library import Library, folder_for, write_m3u
 from libber.matcher import Candidate
 from libber.models import Playlist, Track
@@ -643,6 +644,80 @@ class TestManualLink:
     def test_unknown_track_is_refused(self, make_job, monkeypatch, stub_download):
         job, _ = self._stuck_track(make_job, monkeypatch, stub_download)
         assert "isn't part of this job" in job.retry_url("nope", "https://youtu.be/dQw4w9WgXcQ", None)
+
+
+class TestCircuitBreaker:
+    """A run left unattended must not keep hammering a service that has started
+    refusing it. Every failing track tried three candidates, so a blocked
+    connection meant hundreds of identical requests against something already
+    saying no -- deepening the block and burying the cause."""
+
+    def _failing(self, monkeypatch, message):
+        from libber.download import DownloadFailed
+        attempts = []
+
+        def fake(cand, dest, on_progress=None, **kw):
+            attempts.append(cand.video_id)
+            raise DownloadFailed(message)
+
+        monkeypatch.setattr("libber.jobs.fetch_audio", fake)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="a"), candidate(video_id="b"),
+                                       candidate(video_id="c")])
+        return attempts
+
+    def test_stops_quickly_when_the_connection_is_refused(self, make_job, playlist,
+                                                          monkeypatch):
+        attempts = self._failing(
+            monkeypatch, "YouTube is blocking this connection as automated traffic")
+        pl = playlist(30)
+        job = make_job(pl)
+        for task in job.ordered():
+            job._process(task)
+
+        assert job.cancelled.is_set()
+        assert "few hours" in job.stopped_early
+        done = [t for t in job.tasks.values() if t.status == ERROR]
+        assert len(done) <= 3            # tripped, rather than working through 30
+
+    def test_a_refused_connection_does_not_try_every_candidate(self, make_job, playlist,
+                                                               monkeypatch):
+        """The next candidate fails identically, so trying it triples the load
+        for nothing."""
+        attempts = self._failing(monkeypatch, "YouTube refused to serve this track's audio")
+        pl = playlist(1)
+        job = make_job(pl)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert len(attempts) == 1        # not all three
+
+    def test_ordinary_failures_are_tolerated_longer(self, make_job, playlist, monkeypatch):
+        """A handful of unavailable videos is normal and must not abort a run."""
+        self._failing(monkeypatch, "That YouTube video is unavailable")
+        pl = playlist(4)
+        job = make_job(pl)
+        for task in job.ordered():
+            job._process(task)
+        assert not job.cancelled.is_set()
+
+    def test_a_success_resets_the_count(self, make_job, playlist, monkeypatch,
+                                        stub_download):
+        """Failures have to be consecutive: scattered ones across a long run are
+        not a blocked connection."""
+        pl = playlist(3)
+        job = make_job(pl)
+        job._note_failure("unavailable")
+        job._note_failure("unavailable")
+        job._note_success()
+        job._note_failure("unavailable")
+        assert not job.cancelled.is_set()
+
+    def test_remaining_tracks_are_marked_cancelled(self, make_job, playlist, monkeypatch):
+        self._failing(monkeypatch, "YouTube is blocking this connection")
+        pl = playlist(10)
+        job = make_job(pl)
+        for task in job.ordered():
+            job._process(task)
+        assert any(t.status == CANCELLED for t in job.tasks.values())
 
 
 class TestCancellation:
