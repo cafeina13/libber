@@ -16,7 +16,9 @@ codebase is about.
   YouTube Music playlist or video link and it downloads that exact recording,
   no matching, no Spotify account, no sign-in of any kind.
 - **Real audio, no re-encode.** YouTube already serves Opus, so the extract step
-  is a stream copy — the bytes you get are the bytes Google served.
+  is a stream copy — the bytes you get are the bytes Google served. Signed in,
+  YouTube Music hands over itag 774 at around 260 kbps rather than the 133 kbps
+  of itag 251, so cookies roughly double the bitrate as a side effect.
 - **Proper tags.** Title, artist, album, album artist, date, track/disc number,
   ISRC, and the full-size Spotify cover art embedded in every file.
 - **Match verification.** Every candidate is scored on title, artist, and
@@ -35,12 +37,20 @@ codebase is about.
 
 - Python 3.12+
 - [ffmpeg](https://ffmpeg.org/) on your `PATH`
+- A JavaScript runtime on your `PATH` — **[Node](https://nodejs.org/)**, Deno or Bun
 
 ```
 winget install Gyan.FFmpeg.Essentials      # Windows
 brew install ffmpeg                        # macOS
 sudo apt install ffmpeg                    # Debian/Ubuntu
 ```
+
+The JS runtime is not optional. YouTube signs its media URLs with a challenge
+that has to be executed, and without a runtime the extractor gets titles and
+thumbnails but **no audio at all**. It surfaces as *"Sign in to confirm you're
+not a bot"* or *"The page needs to be reloaded"*, neither of which points at the
+real cause. libber detects Deno, Node or Bun automatically and tells you in
+Settings which one it found.
 
 ## Install
 

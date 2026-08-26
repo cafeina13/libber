@@ -22,6 +22,7 @@ from mutagen.oggopus import OggOpus
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+from .config import js_runtime
 from .matcher import Candidate
 from .spotify import Track
 
@@ -77,8 +78,12 @@ def _ydl_opts(
         "format": "bestaudio[acodec=opus]/bestaudio/best",
         "outtmpl": {"default": "%(id)s.%(ext)s"},
         "paths": {"home": str(tmp)},
+        # No preferredquality. yt-dlp stream-copies when the source codec
+        # already matches the target, and naming a quality is the one thing
+        # that could push ffmpeg into encoding to hit it. Omitting it keeps the
+        # copy unconditional.
         "postprocessors": [
-            {"key": "FFmpegExtractAudio", "preferredcodec": "opus", "preferredquality": "0"}
+            {"key": "FFmpegExtractAudio", "preferredcodec": "opus"}
         ],
         "quiet": True,
         "no_warnings": True,
@@ -90,6 +95,10 @@ def _ydl_opts(
         "progress_hooks": [hook],
         "ignoreerrors": False,
     }
+    # Without a JS runtime YouTube hands back storyboards and nothing else.
+    runtime = js_runtime()
+    if runtime:
+        opts["js_runtimes"] = runtime
     if cookies:
         # Anonymous requests now get "Sign in to confirm you're not a bot".
         opts["cookiesfrombrowser"] = cookies

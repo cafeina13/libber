@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+from .config import js_runtime
 from .models import Playlist, Track
 
 
@@ -145,7 +146,7 @@ def _to_track(entry: dict[str, Any], index: int = 0) -> Track | None:
     )
 
 
-def _extract(url: str, flat: bool) -> dict[str, Any]:
+def _extract(url: str, flat: bool, cookies: tuple | None = None) -> dict[str, Any]:
     opts: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
@@ -153,6 +154,11 @@ def _extract(url: str, flat: bool) -> dict[str, Any]:
         "skip_download": True,
         "ignoreerrors": True,
     }
+    runtime = js_runtime()
+    if runtime:
+        opts["js_runtimes"] = runtime
+    if cookies:
+        opts["cookiesfrombrowser"] = cookies
     if flat:
         opts["extract_flat"] = "in_playlist"
     try:
@@ -177,11 +183,12 @@ def _tidy(message: str) -> str:
     return text.splitlines()[0][:200] if text else "Couldn't read that link."
 
 
-def fetch(raw: str) -> Playlist:
+def fetch(raw: str, cookies: tuple | None = None) -> Playlist:
     kind, ident = parse_source(raw)
 
     if kind == "yt-video":
-        info = _extract(f"https://www.youtube.com/watch?v={ident}", flat=False)
+        info = _extract(f"https://www.youtube.com/watch?v={ident}", flat=False,
+                        cookies=cookies)
         track = _to_track(info, 1)
         if not track:
             raise YouTubeError("That video can't be downloaded (live, private or removed).")
@@ -194,7 +201,8 @@ def fetch(raw: str) -> Playlist:
             tracks=[track],
         )
 
-    info = _extract(f"https://www.youtube.com/playlist?list={ident}", flat=True)
+    info = _extract(f"https://www.youtube.com/playlist?list={ident}", flat=True,
+                    cookies=cookies)
     entries = [e for e in (info.get("entries") or []) if e]
     tracks, skipped = [], []
     for i, entry in enumerate(entries, start=1):

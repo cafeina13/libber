@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,6 +70,22 @@ class Settings:
 
 PERSISTED = ("output_dir", "concurrency", "match_threshold", "skip_low_matches",
              "enrich_youtube", "cookies_browser", "cookies_profile", "sleep_between")
+
+
+def js_runtime() -> dict:
+    """A JavaScript runtime for yt-dlp, if one is installed.
+
+    YouTube signs its media URLs with a challenge that has to be executed, so
+    without a runtime the extractor gets metadata and storyboards but no audio
+    at all -- reported as "Sign in to confirm you're not a bot" or "The page
+    needs to be reloaded", neither of which points at the real cause. yt-dlp
+    only looks for Deno unless told otherwise, so Node goes unused despite
+    being far more commonly installed.
+    """
+    for name in ("deno", "node", "bun"):
+        if shutil.which(name):
+            return {name: {}}
+    return {}
 
 
 def probe_cookies(settings: Settings) -> dict:

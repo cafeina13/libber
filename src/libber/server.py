@@ -25,6 +25,8 @@ from . import config
 from .config import (
     REDIRECT_PATH,
     Settings,
+    cookie_option,
+    js_runtime,
     load_settings,
     probe_cookies,
     redirect_uri,
@@ -136,6 +138,9 @@ async def status() -> dict[str, Any]:
             "sleep_between": settings.sleep_between,
         },
         "browsers": detect_browsers(),
+        # Without one of these YouTube serves no audio at all, so it's worth
+        # stating up front rather than discovering it a hundred tracks in.
+        "js_runtime": next(iter(js_runtime()), ""),
     }
 
 
@@ -347,7 +352,9 @@ async def load_youtube(body: PlaylistBody) -> dict[str, Any]:
     """YouTube needs no auth at all -- the recording is already identified, so
     there is no matching step and nothing to sign in to."""
     try:
-        playlist = await asyncio.to_thread(fetch_youtube, body.url)
+        playlist = await asyncio.to_thread(
+            fetch_youtube, body.url, cookie_option(state.settings)
+        )
     except YouTubeError as exc:
         raise HTTPException(400, str(exc)) from exc
     return _playlist_response(playlist)

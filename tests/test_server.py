@@ -162,13 +162,14 @@ class TestLoadingPlaylists:
 class TestLoadingYouTube:
     def test_marks_the_playlist_as_direct(self, client, monkeypatch):
         monkeypatch.setattr("libber.server.fetch_youtube",
-                            lambda url: sample_playlist(kind="yt-playlist", direct=True))
+                            lambda url, cookies=None: sample_playlist(kind="yt-playlist",
+                                                                      direct=True))
         body = client.post("/api/youtube", json={"url": "https://youtu.be/x"}).json()
         assert body["playlist"]["kind"] == "yt-playlist"
         assert body["playlist"]["direct"] is True
 
     def test_bad_link_is_a_400(self, client, monkeypatch):
-        def bad(url):
+        def bad(url, cookies=None):
             raise YouTubeError("That doesn't look like a YouTube link.")
 
         monkeypatch.setattr("libber.server.fetch_youtube", bad)
@@ -179,7 +180,8 @@ class TestLoadingYouTube:
     def test_needs_no_credentials(self, client, monkeypatch):
         """The YouTube card must work with no Spotify setup at all."""
         monkeypatch.setattr("libber.server.fetch_youtube",
-                            lambda url: sample_playlist(kind="yt-video", n=1, direct=True))
+                            lambda url, cookies=None: sample_playlist(kind="yt-video", n=1,
+                                                                      direct=True))
         assert client.get("/api/status").json()["has_credentials"] is False
         assert client.post("/api/youtube", json={"url": "https://youtu.be/x"}).status_code == 200
 
