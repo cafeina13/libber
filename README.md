@@ -107,7 +107,7 @@ machine except to talk to Spotify.
 
 ### What signing in actually gives libber
 
-Being asked to sign in to Spotify by a program you just cloned deserves
+Being asked to sign in to Spotify by a program deserves
 suspicion, so here is exactly what it does and what it cannot do.
 
 **You are not giving libber your password.** The sign-in happens on Spotify's
