@@ -216,8 +216,27 @@ code {
   position: fixed; inset: 0; background: rgba(0,0,0,.6);
   display: grid; place-items: center; z-index: 40; padding: 20px;
 }
-.drawer-inner { width: min(480px, 100%); }
-.drawer-actions { display: flex; justify-content: space-between; margin-top: 18px; }
+/* Capped and scrollable: centring an over-tall card pushes its top off-screen
+   with no way to reach it, since the overlay itself is fixed. */
+.drawer-inner {
+  width: min(480px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer-inner > h2 {
+  position: sticky; top: -18px; z-index: 1;
+  margin: -18px -18px 14px; padding: 18px 18px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+/* Bleeds to the card edges so it covers content scrolling underneath, and the
+   negative offset cancels the card's own bottom padding. */
+.drawer-actions {
+  display: flex; justify-content: space-between; gap: 10px;
+  position: sticky; bottom: -18px;
+  margin: 18px -18px -18px; padding: 14px 18px 18px;
+  background: var(--panel); border-top: 1px solid var(--line);
+}
 
 @media (max-width: 720px) {
   .track { grid-template-columns: auto 1fr auto; }
