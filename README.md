@@ -298,9 +298,16 @@ If you're already blocked, neither fixes it retroactively. Wait a few hours.
 > A blocked IP clears by itself; a suspended Google account takes your mail,
 > drive and everything else attached to it.
 >
-> Prefer a browser profile with no Google login — the check often passes on
-> cookies alone, and then the worst case is a temporary IP block. If you do use
-> a signed-in profile, make it one you can afford to lose.
+> **At Standard quality you do not need to be signed in.** Anonymous cookies
+> from a browser that has merely visited youtube.com get past the check and
+> reach the ~130 kbps stream — measured by stripping every authentication
+> cookie from a working profile and retrying. Only High needs a signed-in
+> session, because itag 774 is offered to nothing else.
+>
+> So the safest setup is a second browser profile, logged into nothing, used
+> only by libber; every Firefox-family profile on the machine is listed
+> separately in Settings so you can point at it. Choose that unless you
+> specifically want High, and the worst case becomes a temporary IP block.
 >
 > libber reads cookies locally through yt-dlp and sends them only to YouTube.
 > It never stores or logs them: `settings.json` holds the browser name and

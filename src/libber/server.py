@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -186,12 +187,19 @@ def detect_browsers() -> list[dict[str, str]]:
         profiles = [p for p in root.iterdir() if (p / "cookies.sqlite").exists()]
         if not profiles:
             continue
-        newest = max(profiles, key=lambda p: (p / "cookies.sqlite").stat().st_mtime)
-        found.append({
-            "browser": "firefox",
-            "profile": "" if label == "firefox" else str(newest),
-            "label": label,
-        })
+        # Every profile, not just the most recent: a profile kept signed out of
+        # Google is the safe way to do this, and it is rarely the one in
+        # everyday use.
+        profiles.sort(key=lambda p: (p / "cookies.sqlite").stat().st_mtime, reverse=True)
+        for profile in profiles:
+            # Firefox proper can find its own default, so leave that path empty.
+            default = label == "firefox" and profile is profiles[0]
+            name = re.sub(r"^[a-z0-9]{8}\.", "", profile.name)
+            found.append({
+                "browser": "firefox",
+                "profile": "" if default else str(profile),
+                "label": label if default else f"{label} — {name}",
+            })
     return found
 
 
