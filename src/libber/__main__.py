@@ -50,7 +50,7 @@ def main() -> int:
     import uvicorn
 
     from .config import SERVER_HOST, redirect_uri
-    from .server import app, state
+    from .server import app, set_exit_check, state
 
     url = f"http://{SERVER_HOST}:{args.port}"
     print(f"\n  libber   ->  {url}")
@@ -60,7 +60,19 @@ def main() -> int:
     if not args.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
 
-    uvicorn.run(app, host=SERVER_HOST, port=args.port, log_level="warning")
+    # Built explicitly rather than uvicorn.run() so the SSE endpoint can watch
+    # should_exit; otherwise Ctrl+C waits on a stream that never ends.
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=SERVER_HOST,
+            port=args.port,
+            log_level="warning",
+            timeout_graceful_shutdown=5,   # backstop for anything still stuck
+        )
+    )
+    set_exit_check(lambda: server.should_exit)
+    server.run()
     return 0
 
 

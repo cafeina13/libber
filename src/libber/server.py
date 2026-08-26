@@ -10,7 +10,7 @@ import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import (
@@ -44,6 +44,20 @@ from .youtube import YouTubeError
 from .youtube import fetch as fetch_youtube
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Set by __main__ to uvicorn's own shutdown flag. Long-lived responses have
+# to watch it: the lifespan hook is no use, because uvicorn runs that only
+# after connections close, which is exactly what is being waited on.
+_should_exit: Callable[[], bool] = lambda: False
+
+
+def set_exit_check(check: Callable[[], bool]) -> None:
+    global _should_exit
+    _should_exit = check
+
+
+def should_exit() -> bool:
+    return _should_exit()
 
 
 class State:
@@ -476,14 +490,23 @@ async def job_events(job_id: str, request: Request) -> StreamingResponse:
     async def stream():
         try:
             yield _sse({"event": "snapshot", "snapshot": job.snapshot()})
+            idle = 0
             while True:
-                if await request.is_disconnected():
+                # This stream stays open for the life of the job, and
+                # uvicorn's graceful shutdown waits for open connections --
+                # so without watching for it, Ctrl+C hangs until the
+                # browser happens to disconnect.
+                if should_exit() or await request.is_disconnected():
                     break
                 try:
-                    message = await asyncio.wait_for(queue.get(), timeout=15)
+                    message = await asyncio.wait_for(queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
+                    idle += 1
+                    if idle >= 15:      # keepalive every ~15s, not every 1s
+                        idle = 0
+                        yield ": keepalive\n\n"
                     continue
+                idle = 0
                 yield _sse(message)
                 # Deliberately no break on the "job" event. Fixing a match
                 # happens after the job reports done, and closing here left
