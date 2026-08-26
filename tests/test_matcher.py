@@ -75,6 +75,50 @@ class TestVariantDetection:
         assert "live" not in variants_in("Delivery Man")
 
 
+class TestAlbumEditionsAreNotVariants:
+    """An album called "(Extended)" is a deluxe edition, not a set of remixes.
+
+    Halsey's "Easier than Lying" sits on "If I Can't Have Love, I Want Power
+    (Extended)". Reading that as a request for an extended mix docked the
+    correct recording 10 points and flagged it "missing: extended mix".
+    """
+
+    def test_extended_in_an_album_is_ignored(self):
+        assert "extended" not in variants_in("Album (Extended)", album=True)
+
+    def test_extended_in_a_title_still_counts(self):
+        assert "extended" in variants_in("Song (Extended Mix)")
+
+    @pytest.mark.parametrize(
+        "album, expected",
+        [
+            ("Live at Wembley", "live"),        # really does hold live takes
+            ("MTV Unplugged", "live"),
+            ("Acoustic Sessions", "acoustic"),
+            ("Demo Recordings", "demo"),
+            ("Zoom Karaoke - Seventies", "karaoke"),
+        ],
+    )
+    def test_other_words_survive_the_move_to_an_album(self, album, expected):
+        assert expected in variants_in(album, album=True)
+
+    def test_the_case_that_shipped(self, track):
+        t = track(title="Easier than Lying", artists=["Halsey"],
+                  album="If I Can't Have Love, I Want Power (Extended)",
+                  duration_ms=206_000)
+        result = score(t, cand("Easier than Lying", ["Halsey"], 206,
+                               album="If I Can't Have Love, I Want Power"))
+        assert result.flags == []
+        assert result.score >= 95
+
+    def test_a_real_extended_mix_is_still_flagged(self, track):
+        """The guard has to keep working where it was right all along."""
+        t = track(title="Song", artists=["Artist"], duration_ms=200_000)
+        result = score(t, cand("Song (Extended Mix)", ["Artist"], 200))
+        assert result.risky
+        assert "extended mix" in result.flags
+
+
 class TestTitleFloor:
     """A different song by the right artist used to pass.
 

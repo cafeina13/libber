@@ -110,14 +110,23 @@ def normalise(text: str) -> str:
     return _SPACE.sub(" ", text).strip()
 
 
-def variants_in(text: str) -> set[str]:
+# Words whose meaning changes between a track title and an album title. An
+# album called "(Extended)" is a deluxe edition with bonus tracks, not a record
+# of extended mixes -- reading it as one penalised the correct recording of
+# Halsey's "Easier than Lying" for not being a remix. The rest survive the move
+# intact: a "Live at ..." album really does hold live takes, an "Acoustic"
+# album really is acoustic, "Demos" really are demos.
+_TITLE_ONLY = {"extended"}
+
+
+def variants_in(text: str, *, album: bool = False) -> set[str]:
     low = f" {_PUNCT.sub(' ', (text or '').lower())} "
     low = _SPACE.sub(" ", low)
     found = set()
     for key, words in VARIANTS.items():
         if any(f" {w} " in low for w in words):
             found.add(key)
-    return found
+    return found - _TITLE_ONLY if album else found
 
 
 @dataclass
@@ -217,8 +226,8 @@ def score(track: Track, cand: Candidate) -> Candidate:
     # The album name matters as much as the title here: karaoke and tribute
     # pressings often have a clean track title and give themselves away only
     # in the album ("Zoom Karaoke - Seventies", "The Music of Queen").
-    src_variants = variants_in(track.title) | variants_in(track.album)
-    cand_variants = variants_in(cand.title) | variants_in(cand.album)
+    src_variants = variants_in(track.title) | variants_in(track.album, album=True)
+    cand_variants = variants_in(cand.title) | variants_in(cand.album, album=True)
     risky = False
 
     # The title is the only signal that establishes *which song* this is.
