@@ -89,6 +89,16 @@ def audio_format(settings: Settings) -> str:
     return FORMAT_HIGH if settings.audio_quality == "high" else FORMAT_STANDARD
 
 
+def min_bitrate(settings: Settings) -> int:
+    """The floor a file already on disk must clear to be reused as-is.
+
+    Standard accepts anything: a 260 kbps file is not a reason to re-download.
+    High sits above the ~130 kbps stream and below the ~260 one, so a file
+    fetched before the setting changed is recognised as the lesser version.
+    """
+    return 190 if settings.audio_quality == "high" else 0
+
+
 def js_runtime() -> dict:
     """A JavaScript runtime for yt-dlp, if one is installed.
 

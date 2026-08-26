@@ -35,6 +35,7 @@ class Entry:
     artist: str
     score: float
     at: str
+    bitrate: int = 0        # kbps; 0 when unknown, filled in on first read
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -86,7 +87,9 @@ class Library:
     def known_ids(self) -> set[str]:
         return {tid for tid in self._data["tracks"] if self.entry(tid)}
 
-    def entry_by_video(self, video_id: str) -> tuple[str, Entry] | None:
+    def entry_by_video(
+        self, video_id: str, min_bitrate: int = 0
+    ) -> tuple[str, Entry] | None:
         """Find an already-downloaded track that used this YouTube video.
 
         A playlist often lists the same recording twice under different Spotify
@@ -101,8 +104,14 @@ class Library:
                 if raw.get("video_id") == video_id
             ]
         for track_id, raw in candidates:
-            if (self.root / raw["file"]).exists():
-                return track_id, Entry(**raw)
+            if not (self.root / raw["file"]).exists():
+                continue
+            found = Entry(**raw)
+            # Reusing a file fetched at a lower quality would silently ignore
+            # the setting -- the request was for the better stream.
+            if min_bitrate and self.bitrate_of(found) < min_bitrate:
+                continue
+            return track_id, found
         return None
 
     def owner_of(self, path: Path) -> str | None:
@@ -203,8 +212,47 @@ class Library:
             self.reviews().pop(track_id, None)
 
     # -- mutations -------------------------------------------------------
+    def bitrate_of(self, entry: Entry) -> int:
+        """The file's bitrate in kbps, read from the audio if not yet recorded.
+
+        Entries written before bitrate was tracked carry 0, and probing is
+        cheap enough to do lazily -- mutagen reads the Opus header, no
+        subprocess -- so the answer is cached back into the entry.
+        """
+        if entry.bitrate:
+            return entry.bitrate
+        from mutagen.oggopus import OggOpus
+
+        try:
+            kbps = int(OggOpus(self.root / entry.file).info.bitrate / 1000)
+        except Exception:
+            return 0
+        with self._lock:
+            for raw in self._data["tracks"].values():
+                if raw.get("file") == entry.file:
+                    raw["bitrate"] = kbps
+        return kbps
+
+    def repoint(self, old_file: str, new_path: Path, bitrate: int = 0) -> int:
+        """Move every entry that referenced one file onto another.
+
+        Used when a shared recording is re-fetched at a higher quality: each
+        track pointing at the superseded file should follow it, or they would
+        keep resolving to the lesser version.
+        """
+        new_file = str(new_path.relative_to(self.root)).replace("\\", "/")
+        moved = 0
+        with self._lock:
+            for raw in self._data["tracks"].values():
+                if raw.get("file") == old_file:
+                    raw["file"] = new_file
+                    raw["bitrate"] = int(bitrate or 0)
+                    moved += 1
+        return moved
+
     def record(
-        self, track: Track, path: Path, video_id: str, title: str, artist: str, score: float
+        self, track: Track, path: Path, video_id: str, title: str, artist: str,
+        score: float, bitrate: int = 0
     ) -> None:
         with self._lock:
             self._data["tracks"][track.id] = Entry(
@@ -214,6 +262,7 @@ class Library:
                 artist=artist,
                 score=round(score, 1),
                 at=_now(),
+                bitrate=int(bitrate or 0),
             ).to_dict()
             # A downloaded track is no longer awaiting a decision, however it
             # got there -- matched, reused, or a link pasted by hand.

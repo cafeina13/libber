@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import enrich, matcher
-from .config import Settings, audio_format, cookie_option
+from .config import Settings, audio_format, cookie_option, min_bitrate
 from .download import DownloadFailed, fetch_audio, target_path, write_tags
 from .library import Library, folder_for, write_m3u
 from .matcher import Candidate
@@ -303,7 +303,8 @@ class Job:
             # The same recording can appear twice in one playlist under two
             # Spotify ids (a single and its album release). Point the second at
             # the file we already have rather than downloading it again.
-            shared = self.library.entry_by_video(candidate.video_id)
+            floor = min_bitrate(self.settings)
+            shared = self.library.entry_by_video(candidate.video_id, floor)
             if shared:
                 _, found = shared
                 path = self.library.root / found.file
@@ -314,6 +315,7 @@ class Job:
                     title=found.title,
                     artist=found.artist,
                     score=candidate.score,
+                    bitrate=found.bitrate,
                 )
                 task.status = DONE
                 task.progress = 1.0
@@ -322,6 +324,13 @@ class Job:
                 task.message = "same recording as another track — reused"
                 self._push(task)
                 return
+
+            # The recording is on disk but below the quality now being asked
+            # for. Fetch the better stream over the same file rather than
+            # beside it: a second copy would differ only in bitrate, and every
+            # track pointing at the old one would still be pointing at the
+            # lesser version.
+            upgrade = self.library.entry_by_video(candidate.video_id) if floor else None
 
             task.status = DOWNLOADING
             task.chosen = candidate
@@ -334,7 +343,9 @@ class Job:
                 _task.message = note
                 self._push(_task)
 
-            destination = self._reserve_path(task)
+            destination = (
+                self.library.root / upgrade[1].file if upgrade else self._reserve_path(task)
+            )
             try:
                 result = fetch_audio(
                     candidate,
@@ -352,6 +363,9 @@ class Job:
                 continue
 
             write_tags(result.path, task.track, candidate.url)
+            if upgrade:
+                # Everything that shared the old file shares the new one.
+                self.library.repoint(upgrade[1].file, result.path, result.bitrate)
             self.library.record(
                 track=task.track,
                 path=result.path,
@@ -359,6 +373,7 @@ class Job:
                 title=candidate.title,
                 artist=", ".join(candidate.artists),
                 score=candidate.score,
+                bitrate=result.bitrate,
             )
             task.status = DONE
             task.progress = 1.0

@@ -323,6 +323,12 @@ codecs — applause, harpsichord, castanets, dense electronic music are the
 classic cases. It needs cookies, since itag 774 is only offered to a signed-in
 session.
 
+Switching to High doesn't re-download a library you already have — a track
+already on disk stays as it is. It does stop a *shared* recording being reused
+at the lower bitrate: when one is fetched again at High, the better stream
+replaces the old file in place and every track pointing at it follows, rather
+than a second copy appearing beside the first.
+
 ## When YouTube blocks you
 
 Past a few hundred downloads YouTube starts answering with *"Sign in to confirm

@@ -228,6 +228,100 @@ class TestDuplicateReuse:
         ).file
 
 
+class TestQualityAwareReuse:
+    """Reuse ignored the quality setting.
+
+    Switching to High and re-running reused whatever was already on disk, so
+    tracks sharing a recording with an earlier ~130 kbps download silently
+    stayed at ~130 while their neighbours came down at ~260.
+    """
+
+    def _stub(self, monkeypatch, bitrate):
+        calls = []
+
+        def fake(cand, dest, on_progress=None, **kw):
+            calls.append(cand.video_id)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"audio")
+            return Result(path=dest, video_id=cand.video_id, bitrate=bitrate,
+                          duration_s=200.0)
+
+        monkeypatch.setattr("libber.jobs.fetch_audio", fake)
+        monkeypatch.setattr("libber.jobs.write_tags", lambda *a, **k: None)
+        return calls
+
+    def test_standard_reuses_whatever_is_there(self, make_job, playlist, monkeypatch):
+        """A 260 kbps file is no reason to re-download at Standard."""
+        calls = self._stub(monkeypatch, 260)
+        pl = playlist(2)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="shared")])
+        job = make_job(pl, audio_quality="standard")
+        job._process(job.tasks[pl.tracks[0].id])
+        job._process(job.tasks[pl.tracks[1].id])
+        assert len(calls) == 1
+        assert "reused" in job.tasks[pl.tracks[1].id].message
+
+    def test_high_refuses_a_lower_bitrate_file(self, make_job, playlist, monkeypatch):
+        calls = self._stub(monkeypatch, 130)
+        pl = playlist(2)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="shared")])
+        job = make_job(pl, audio_quality="high")
+        job._process(job.tasks[pl.tracks[0].id])
+        job._process(job.tasks[pl.tracks[1].id])
+        assert len(calls) == 2                 # fetched again, not reused
+        assert "reused" not in job.tasks[pl.tracks[1].id].message
+
+    def test_the_upgrade_replaces_the_file_rather_than_adding_one(
+        self, make_job, playlist, monkeypatch, tmp_path
+    ):
+        """A second copy would differ only in bitrate, and is exactly the "(2)"
+        clutter that has to be cleaned up by hand afterwards."""
+        self._stub(monkeypatch, 130)
+        pl = playlist(2)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="shared")])
+        job = make_job(pl, audio_quality="high")
+        job._process(job.tasks[pl.tracks[0].id])
+        self._stub(monkeypatch, 260)           # the better stream this time
+        job._process(job.tasks[pl.tracks[1].id])
+
+        files = list(job.folder.glob("*.opus"))
+        assert len(files) == 1
+        assert not any("(2)" in f.name for f in files)
+
+    def test_both_tracks_follow_the_upgraded_file(
+        self, make_job, playlist, monkeypatch, tmp_path
+    ):
+        """The track that pointed at the old file must not be left resolving to
+        the version that was just superseded."""
+        self._stub(monkeypatch, 130)
+        pl = playlist(2)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="shared")])
+        job = make_job(pl, audio_quality="high")
+        job._process(job.tasks[pl.tracks[0].id])
+        self._stub(monkeypatch, 260)
+        job._process(job.tasks[pl.tracks[1].id])
+
+        first = job.library.entry(pl.tracks[0].id)
+        second = job.library.entry(pl.tracks[1].id)
+        assert first.file == second.file
+        assert first.bitrate == second.bitrate == 260
+
+    def test_high_still_reuses_a_file_already_at_high(self, make_job, playlist,
+                                                      monkeypatch):
+        calls = self._stub(monkeypatch, 260)
+        pl = playlist(2)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="shared")])
+        job = make_job(pl, audio_quality="high")
+        job._process(job.tasks[pl.tracks[0].id])
+        job._process(job.tasks[pl.tracks[1].id])
+        assert len(calls) == 1                 # nothing to upgrade
+
+
 class TestFilenameReservation:
     def test_distinct_tracks_never_share_a_filename(self, make_job, playlist, track):
         """Filenames carry no track number, so two entries can collapse onto
