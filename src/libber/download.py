@@ -22,7 +22,7 @@ from mutagen.oggopus import OggOpus
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from .config import js_runtime
+from .config import FORMAT_STANDARD, js_runtime
 from .matcher import Candidate
 from .spotify import Track
 
@@ -71,11 +71,12 @@ def _ydl_opts(
     hook,
     cookies: tuple | None = None,
     sleep_between: float = 0.0,
+    fmt: str = FORMAT_STANDARD,
 ) -> dict:
     opts: dict = {
         # Prefer a native Opus stream so the extract step can copy rather than
         # transcode. The fallbacks only matter for oddball uploads.
-        "format": "bestaudio[acodec=opus]/bestaudio/best",
+        "format": fmt,
         "outtmpl": {"default": "%(id)s.%(ext)s"},
         "paths": {"home": str(tmp)},
         # No preferredquality. yt-dlp stream-copies when the source codec
@@ -116,6 +117,7 @@ def fetch_audio(
     on_progress: ProgressFn | None = None,
     cookies: tuple | None = None,
     sleep_between: float = 0.0,
+    fmt: str = FORMAT_STANDARD,
 ) -> Result:
     """Download one candidate to `dest`, replacing anything already there."""
 
@@ -135,7 +137,7 @@ def fetch_audio(
     with tempfile.TemporaryDirectory(prefix="libber-") as raw_tmp:
         tmp = Path(raw_tmp)
         try:
-            with YoutubeDL(_ydl_opts(tmp, hook, cookies, sleep_between)) as ydl:
+            with YoutubeDL(_ydl_opts(tmp, hook, cookies, sleep_between, fmt)) as ydl:
                 info = ydl.extract_info(candidate.url, download=True)
         except DownloadError as exc:
             raise DownloadFailed(_tidy_error(str(exc))) from exc

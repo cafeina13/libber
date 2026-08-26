@@ -109,6 +109,7 @@ class SettingsBody(BaseModel):
     cookies_browser: str | None = None
     cookies_profile: str | None = None
     sleep_between: float | None = None
+    audio_quality: str | None = None
 
 
 # --------------------------------------------------------------------------
@@ -136,6 +137,7 @@ async def status() -> dict[str, Any]:
             "cookies_browser": settings.cookies_browser,
             "cookies_profile": settings.cookies_profile,
             "sleep_between": settings.sleep_between,
+            "audio_quality": settings.audio_quality,
         },
         "browsers": detect_browsers(),
         # Without one of these YouTube serves no audio at all, so it's worth
@@ -228,6 +230,8 @@ async def update_settings(body: SettingsBody) -> dict[str, Any]:
         settings.cookies_profile = body.cookies_profile.strip()
     if body.sleep_between is not None:
         settings.sleep_between = max(0.0, min(30.0, body.sleep_between))
+    if body.audio_quality in ("standard", "high"):
+        settings.audio_quality = body.audio_quality
     save_settings(settings)   # survive a restart; losing output_dir is costly
     payload = await status()
     # Report immediately whether the chosen browser can actually be read --

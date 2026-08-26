@@ -159,6 +159,20 @@
     </p>
 
     <hr class="sep">
+    <label>Audio quality
+      <select id="set-quality">
+        <option value="standard">Standard — ~130 kbps Opus (recommended)</option>
+        <option value="high">High — ~260 kbps Opus, twice the size</option>
+      </select>
+    </label>
+    <p class="muted small">
+      Opus is near-transparent by about 128 kbps in stereo, so High mostly buys
+      file size &mdash; worth it only for dense or difficult material on good
+      headphones. Neither setting re-encodes; they just pick which stream
+      YouTube hands over. High needs cookies.
+    </p>
+
+    <hr class="sep">
     <label>Take cookies from
       <select id="set-cookies"></select>
     </label>

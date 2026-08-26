@@ -70,6 +70,7 @@ async function refreshStatus() {
   $("set-enrich").checked = s.settings.enrich_youtube;
   $("set-sleep").value = s.settings.sleep_between;
   $("sleep-value").textContent = `${s.settings.sleep_between}s`;
+  $("set-quality").value = s.settings.audio_quality || "standard";
 
   // Only browsers actually installed here are offered; a Firefox fork carries
   // its profile path because yt-dlp can't locate it by name.
@@ -498,6 +499,7 @@ async function saveSettings(stayOpen) {
         cookies_browser: $("set-cookies").value.split("|")[0],
         cookies_profile: $("set-cookies").value.split("|").slice(1).join("|"),
         sleep_between: Number($("set-sleep").value),
+        audio_quality: $("set-quality").value,
       },
     });
     await refreshStatus();

@@ -62,6 +62,11 @@ class Settings:
     # first place. A short random gap between tracks costs little and looks far
     # less like a scraper.
     sleep_between: float = 1.0
+    # "standard" takes the ~130 kbps Opus stream, "high" the ~260 kbps one that
+    # YouTube Music offers a signed-in session. Opus is near-transparent by
+    # about 128 kbps stereo, so "high" mostly buys file size -- it is worth it
+    # only for difficult material on good headphones.
+    audio_quality: str = "standard"
 
     @property
     def has_credentials(self) -> bool:
@@ -69,7 +74,19 @@ class Settings:
 
 
 PERSISTED = ("output_dir", "concurrency", "match_threshold", "skip_low_matches",
-             "enrich_youtube", "cookies_browser", "cookies_profile", "sleep_between")
+             "enrich_youtube", "cookies_browser", "cookies_profile", "sleep_between",
+             "audio_quality")
+
+# Opus only, and never a re-encode. "standard" caps the bitrate so the ~130 kbps
+# stream wins over the ~260 kbps one; both are stream-copied, so the only
+# difference is which one YouTube hands over.
+FORMAT_STANDARD = ("bestaudio[acodec=opus][abr<160]/bestaudio[acodec=opus]"
+                   "/bestaudio/best")
+FORMAT_HIGH = "bestaudio[acodec=opus]/bestaudio/best"
+
+
+def audio_format(settings: Settings) -> str:
+    return FORMAT_HIGH if settings.audio_quality == "high" else FORMAT_STANDARD
 
 
 def js_runtime() -> dict:
@@ -169,6 +186,7 @@ def save_settings(settings: Settings) -> None:
         "cookies_browser": settings.cookies_browser,
         "cookies_profile": settings.cookies_profile,
         "sleep_between": settings.sleep_between,
+        "audio_quality": settings.audio_quality,
     }
     tmp = SETTINGS_FILE.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, indent=1), encoding="utf-8")
@@ -195,7 +213,7 @@ def load_settings() -> Settings:
     if saved.get("output_dir"):
         settings.output_dir = Path(str(saved["output_dir"])).expanduser()
     for key in ("concurrency", "match_threshold", "skip_low_matches", "enrich_youtube",
-                "cookies_browser", "cookies_profile", "sleep_between"):
+                "cookies_browser", "cookies_profile", "sleep_between", "audio_quality"):
         if key in saved and saved[key] is not None:
             setattr(settings, key, type(getattr(settings, key))(saved[key]))
 

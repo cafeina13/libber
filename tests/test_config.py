@@ -16,6 +16,7 @@ import pytest
 from libber import config
 from libber.config import (
     Settings,
+    audio_format,
     cookie_option,
     load_settings,
     probe_cookies,
@@ -109,6 +110,38 @@ class TestCookieOption:
         s = load_settings()
         assert cookie_option(s) == ("firefox", zen)
         assert s.sleep_between == 2.5
+
+
+class TestAudioQuality:
+    """Opus is near-transparent by ~128 kbps stereo, so the 260 kbps stream
+    YouTube Music offers a signed-in session mostly doubles file size. Both are
+    stream-copied; the setting only chooses which one to ask for."""
+
+    def test_standard_is_the_default(self):
+        assert Settings().audio_quality == "standard"
+
+    def test_standard_caps_the_bitrate(self):
+        fmt = audio_format(Settings(audio_quality="standard"))
+        assert "abr<160" in fmt
+        assert fmt.startswith("bestaudio[acodec=opus]")
+
+    def test_high_does_not(self):
+        assert "abr<" not in audio_format(Settings(audio_quality="high"))
+
+    def test_both_prefer_opus_and_fall_back(self):
+        for q in ("standard", "high"):
+            fmt = audio_format(Settings(audio_quality=q))
+            assert "acodec=opus" in fmt      # never chase a non-Opus stream first
+            assert fmt.endswith("/bestaudio/best")   # but still get something
+
+    def test_unknown_value_falls_back_to_standard(self):
+        assert audio_format(Settings(audio_quality="nonsense")) == audio_format(
+            Settings(audio_quality="standard")
+        )
+
+    def test_survives_a_reload(self, isolated):
+        save_settings(Settings(audio_quality="high"))
+        assert load_settings().audio_quality == "high"
 
 
 class TestProbeCookies:

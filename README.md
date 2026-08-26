@@ -16,9 +16,8 @@ codebase is about.
   YouTube Music playlist or video link and it downloads that exact recording,
   no matching, no Spotify account, no sign-in of any kind.
 - **Real audio, no re-encode.** YouTube already serves Opus, so the extract step
-  is a stream copy — the bytes you get are the bytes Google served. Signed in,
-  YouTube Music hands over itag 774 at around 260 kbps rather than the 133 kbps
-  of itag 251, so cookies roughly double the bitrate as a side effect.
+  is a stream copy — the bytes you get are the bytes Google served, at whichever
+  bitrate you pick.
 - **Proper tags.** Title, artist, album, album artist, date, track/disc number,
   ISRC, and the full-size Spotify cover art embedded in every file.
 - **Match verification.** Every candidate is scored on title, artist, and
@@ -235,6 +234,27 @@ threshold — wrong durations, different artists and live-versus-studio
 mismatches are refused outright. **No album beats the wrong album.**
 
 Turn it off in Settings if you'd rather keep YouTube's own metadata.
+
+## Audio quality and size
+
+YouTube offers the same recording as two Opus streams, and libber stream-copies
+whichever you choose — neither is re-encoded, so this is purely which bytes
+Google hands over.
+
+| Setting | Stream | Bitrate | 1000 tracks |
+| --- | --- | --- | --- |
+| **Standard** (default) | itag 251 | ~130 kbps | ~4 GB |
+| High | itag 774 | ~260 kbps | ~8 GB |
+
+Standard is the default because Opus is near-transparent by roughly 128 kbps in
+stereo — it is a far more efficient codec than MP3, and 130 kbps Opus is in the
+region of 192–256 kbps MP3. Doubling the bitrate doubles the disk and the
+download time for a difference most listeners cannot pick out in a blind test.
+
+High is worth it if you listen on good headphones to material that stresses
+codecs — applause, harpsichord, castanets, dense electronic music are the
+classic cases. It needs cookies, since itag 774 is only offered to a signed-in
+session.
 
 ## When YouTube blocks you
 
