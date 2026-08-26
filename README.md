@@ -426,8 +426,40 @@ CI runs the offline suite on every push (`.github/workflows/tests.yml`). The
 network tests stay out of CI deliberately: they need credentials and would fail
 for reasons unrelated to the commit.
 
+## Where this stands legally
+
+libber saves audio that YouTube serves. It's worth being plain about what that
+does and doesn't mean, rather than leaving you to find out.
+
+**It breaks YouTube's Terms of Service.** They permit downloading only through
+their own offline feature. That's a contract between you and Google, and the
+realistic consequence is account-level — rate limiting, or in principle a
+restricted account — not a courtroom. It's also why the cookie setting carries
+the warning it does: cookies tie the activity to a Google account.
+
+**It does not circumvent DRM, deliberately.** Spotify's audio is protected, and
+libber never touches it — Spotify is used for metadata, which is what its API
+is for. YouTube hands the audio to any client that plays it; the bot check that
+cookies get past is anti-scraping, not a protection measure. That distinction
+carries real legal weight in most jurisdictions, and it is why the project is
+built this way rather than the more direct way.
+
+**Copyright depends on where you live.** Many countries allow private copying
+for personal, non-commercial use. Whether that covers downloading, as opposed
+to format-shifting something you already own, is contested and varies. This
+project can't answer that for you, and neither can anyone who hasn't read your
+jurisdiction's law.
+
+**Personal use is the line that matters in practice.** Keeping offline copies of
+music you already listen to is one thing. Redistributing them is another, and
+that's where real consequences live.
+
+**Artists are paid less.** An offline file doesn't generate the per-play royalty
+a stream does. If you subscribe to the services you're pulling from, the
+marginal difference is small — but it isn't nothing, and it's the honest cost of
+doing this.
+
 ## Notes
 
-- Downloads are for personal use. Respect the rights of whoever made the music.
 - Local files and podcast episodes in a playlist are skipped — there's nothing
   to match them against.
