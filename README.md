@@ -33,7 +33,8 @@ codebase is about.
   dealt with days later without re-searching the playlist.
 - **Cheap re-syncs.** A `library.json` tracks what's on disk, so running the
   same playlist again only fetches what's genuinely new. Delete a file and it
-  comes back next run.
+  comes back next run; rename or move one and it is found again, because every
+  file carries its Spotify id in its own tags.
 - **`.m3u8` playlist file** written in playlist order with relative paths, so
   the library can be copied to a phone and still open correctly. Copy the whole
   download folder rather than one playlist — a playlist may reference tracks

@@ -349,7 +349,11 @@ def _playlist_response(playlist: Playlist) -> dict[str, Any]:
     """Shared shape for both sources, so the UI renders them identically."""
     state.playlists[playlist.id] = playlist
     library = state.library()
+    # Recover anything renamed or moved on disk before deciding what is
+    # missing, otherwise a hand-renamed file reads as gone and downloads again.
+    repair = library.reconcile()
     return {
+        "repaired": repair["repaired"],
         "playlist": {
             "id": playlist.id,
             "kind": playlist.kind,

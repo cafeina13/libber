@@ -201,6 +201,9 @@ function renderPlaylist(data) {
   if (sync.removed.length) {
     parts.push(`<span class="muted"><b>${sync.removed.length}</b> removed from playlist since last sync</span>`);
   }
+  if (data.repaired) {
+    parts.push(`<span class="muted"><b>${data.repaired}</b> re-linked after being renamed</span>`);
+  }
   if (pl.skipped && pl.skipped.length) {
     parts.push(`<span class="muted"><b>${pl.skipped.length}</b> skipped (local files / episodes)</span>`);
   }

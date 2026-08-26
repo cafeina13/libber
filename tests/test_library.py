@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
+
+
 
 import pytest
 
 from libber.download import safe_name, target_path
 from libber.library import Library, folder_for, write_m3u
 from libber.models import Playlist
+
+# Maps a stub file to the Spotify id its "tags" would carry.
+_FAKE_TAGS: dict = {}
 
 
 @pytest.fixture
@@ -137,6 +143,100 @@ class TestDedup:
         path = put(library, pl.tracks[0], folder)
         assert library.owner_of(path) == pl.tracks[0].id
         assert library.owner_of(folder / "nothing.opus") is None
+
+
+class TestReconcile:
+    """Renaming a downloaded file by hand detached it from its entry.
+
+    Entries record a path, so the track read as missing and downloaded again
+    while the renamed file sat there unreferenced. Every file libber writes
+    carries its Spotify id in the tags, so the pairing is recoverable from the
+    audio rather than guessed from the name.
+    """
+
+    def _tagged(self, path: Path, spotify_id: str) -> None:
+        """Stand in for a real Opus file carrying a spotifyid tag."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"audio")
+        _FAKE_TAGS[path.resolve()] = spotify_id
+
+    @pytest.fixture(autouse=True)
+    def _fake_reader(self, monkeypatch):
+        """Read the stub tags instead of parsing a real Ogg stream."""
+        class FakeOpus(dict):
+            def __init__(self, path):
+                sid = _FAKE_TAGS.get(Path(path).resolve())
+                if sid is None:
+                    raise ValueError("not an ogg file")
+                super().__init__(spotifyid=[sid])
+
+        monkeypatch.setattr("mutagen.oggopus.OggOpus", FakeOpus)
+
+    def test_nothing_missing_is_a_no_op(self, library, playlist):
+        pl = playlist(1)
+        folder = folder_for(library.root, pl)
+        put(library, pl.tracks[0], folder)
+        assert library.reconcile() == {"repaired": 0, "still_missing": 0}
+
+    def test_a_renamed_file_is_found_again(self, library, playlist):
+        pl = playlist(1)
+        track = pl.tracks[0]
+        folder = folder_for(library.root, pl)
+        path = put(library, track, folder)
+        self._tagged(path, track.id)
+
+        renamed = folder / "Something Else Entirely.opus"
+        path.rename(renamed)
+        _FAKE_TAGS[renamed.resolve()] = track.id
+        assert library.entry(track.id) is None       # detached
+
+        assert library.reconcile()["repaired"] == 1
+        assert library.entry(track.id).file.endswith("Something Else Entirely.opus")
+
+    def test_a_file_claimed_by_another_entry_can_still_be_matched(self, library, playlist):
+        """The tag is authoritative: a stale entry pointing at the file must not
+        stop the track whose id is actually in it from being re-linked."""
+        pl = playlist(2)
+        first, second = pl.tracks
+        folder = folder_for(library.root, pl)
+        shared = folder / "Shared.opus"
+        self._tagged(shared, second.id)
+        library.record(first, shared, "vid1", "t", "a", 100.0)      # stale claim
+        library.record(second, folder / "gone.opus", "vid2", "t", "a", 100.0)
+
+        assert library.reconcile()["repaired"] == 1
+        assert library.entry(second.id).file.endswith("Shared.opus")
+
+    def test_falls_back_to_the_video_when_the_tag_names_another_id(self, library, playlist):
+        """Two Spotify ids sharing one recording: only one is in the tags, but
+        both agree on the video."""
+        pl = playlist(2)
+        first, second = pl.tracks
+        folder = folder_for(library.root, pl)
+        shared = folder / "Shared.opus"
+        self._tagged(shared, first.id)
+        library.record(first, shared, "samevideo", "t", "a", 100.0)
+        library.record(second, folder / "gone.opus", "samevideo", "t", "a", 100.0)
+
+        assert library.reconcile()["repaired"] == 1
+        assert library.entry(second.id).file == library.entry(first.id).file
+
+    def test_a_genuinely_deleted_file_stays_missing(self, library, playlist):
+        pl = playlist(1)
+        track = pl.tracks[0]
+        folder = folder_for(library.root, pl)
+        put(library, track, folder).unlink()
+        result = library.reconcile()
+        assert result == {"repaired": 0, "still_missing": 1}
+        assert library.entry(track.id) is None       # so it downloads again
+
+    def test_unreadable_files_are_skipped(self, library, playlist):
+        pl = playlist(1)
+        track = pl.tracks[0]
+        folder = folder_for(library.root, pl)
+        put(library, track, folder).unlink()
+        (folder / "junk.opus").write_bytes(b"not audio")   # no tags registered
+        assert library.reconcile()["repaired"] == 0
 
 
 class TestReviewQueue:

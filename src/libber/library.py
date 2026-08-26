@@ -121,6 +121,61 @@ class Library:
     def playlist_state(self, playlist_id: str) -> dict[str, Any] | None:
         return self._data["playlists"].get(playlist_id)
 
+    # -- self-healing ----------------------------------------------------
+    def reconcile(self) -> dict[str, int]:
+        """Re-point entries at files that were renamed or moved.
+
+        Entries record a path, so renaming a file by hand silently detaches it:
+        the track reads as missing and downloads again while the renamed file
+        sits there unreferenced. Every file libber writes carries its Spotify id
+        in the tags, which is authoritative -- the pairing is recovered from the
+        audio rather than guessed from the name.
+
+        Only folders that actually contain a missing entry are scanned, so the
+        usual case (nothing missing) costs one directory listing.
+        """
+        from mutagen.oggopus import OggOpus
+
+        with self._lock:
+            missing = {tid: e for tid, e in self._data["tracks"].items()
+                       if not (self.root / e["file"]).exists()}
+        if not missing:
+            return {"repaired": 0, "still_missing": 0}
+
+        folders = {(self.root / e["file"]).parent for e in missing.values()}
+        by_id: dict[str, str] = {}
+        for folder in folders:
+            if not folder.is_dir():
+                continue
+            for path in folder.glob("*.opus"):
+                try:
+                    tagged = (OggOpus(path).get("spotifyid") or [""])[0]
+                except Exception:
+                    continue
+                # A file claimed by another entry is still the right answer for
+                # whatever its tags say it is; two ids sharing one file is
+                # normal when a recording is reused.
+                if tagged:
+                    by_id.setdefault(tagged, path.relative_to(self.root).as_posix())
+
+        repaired = 0
+        with self._lock:
+            # A file that survives can be pointed at by more than one id: two
+            # Spotify ids for one recording share a file, and only one of them
+            # is in the tags. Fall back to the video, which both agree on.
+            by_video = {e["video_id"]: e["file"]
+                        for e in self._data["tracks"].values()
+                        if e.get("video_id") and (self.root / e["file"]).exists()}
+            for track_id, entry in list(missing.items()):
+                found = by_id.get(track_id) or by_video.get(entry.get("video_id", ""))
+                if found:
+                    self._data["tracks"][track_id]["file"] = found
+                    missing.pop(track_id)
+                    repaired += 1
+        if repaired:
+            self.save()
+        return {"repaired": repaired, "still_missing": len(missing)}
+
     # -- review queue ----------------------------------------------------
     # Tracks the matcher wouldn't guess at. Kept on disk because the queue is
     # the whole point of a confidence threshold: without this, closing the page
