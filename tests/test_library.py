@@ -23,12 +23,12 @@ def library(tmp_path):
     return Library(tmp_path)
 
 
-def put(library, track, folder, video_id="vid", score=95.0):
+def put(library, track, folder, video_id="vid", score=95.0, bitrate=0):
     """Pretend a track was downloaded."""
     path = target_path(folder, track)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"fake opus")
-    library.record(track, path, video_id, track.title, track.artist, score)
+    library.record(track, path, video_id, track.title, track.artist, score, bitrate)
     return path
 
 
@@ -112,6 +112,34 @@ class TestSyncReport:
         state.parent.mkdir(parents=True)
         state.write_text("{ this is not json", encoding="utf-8")
         assert Library(tmp_path).known_ids() == set()
+
+
+class TestBelowQualityReport:
+    """Naming the tracks that sit under the current setting is what makes an
+    upgrade a choice rather than a guess."""
+
+    def test_empty_when_no_floor_is_set(self, library, playlist):
+        pl = playlist(1)
+        folder = folder_for(library.root, pl)
+        put(library, pl.tracks[0], folder)
+        assert library.sync_report(pl)["below_quality"] == []
+
+    def test_lists_tracks_under_the_floor(self, library, playlist):
+        pl = playlist(2)
+        folder = folder_for(library.root, pl)
+        put(library, pl.tracks[0], folder, bitrate=130)
+        put(library, pl.tracks[1], folder, bitrate=260)
+        below = library.sync_report(pl, min_bitrate=190)["below_quality"]
+        assert below == [pl.tracks[0].id]
+
+    def test_they_still_count_as_existing(self, library, playlist):
+        """Switching quality must not make a library look un-downloaded."""
+        pl = playlist(1)
+        folder = folder_for(library.root, pl)
+        put(library, pl.tracks[0], folder, bitrate=130)
+        report = library.sync_report(pl, min_bitrate=190)
+        assert report["existing"] == [pl.tracks[0].id]
+        assert report["new"] == []
 
 
 class TestDedup:

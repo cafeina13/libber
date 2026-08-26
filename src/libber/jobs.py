@@ -57,6 +57,9 @@ class Task:
     candidates: list[Candidate] = field(default_factory=list)
     chosen: Candidate | None = None
     path: Path | None = None
+    # Set when re-fetching at a higher quality: the better stream is written
+    # over the existing file so no second copy appears beside it.
+    replace_path: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +84,7 @@ class Job:
         library: Library,
         loop: asyncio.AbstractEventLoop,
         spotify: Any = None,
+        upgrade: bool = False,
     ) -> None:
         self.id = uuid.uuid4().hex[:12]
         self.playlist = playlist
@@ -90,6 +94,9 @@ class Job:
         # SpotifyAuth, used only to enrich YouTube-sourced tracks. Optional:
         # the YouTube card works with no Spotify credentials at all.
         self.spotify = spotify
+        # Re-fetch tracks already on disk that are below the requested quality.
+        # Never implicit: flipping the setting must not start a bulk download.
+        self.upgrade = upgrade
         self.folder = folder_for(library.root, playlist)
         self.status = PENDING
         self.cancelled = threading.Event()
@@ -185,12 +192,17 @@ class Job:
 
         existing = self.library.entry(task.track.id)
         if existing:
-            task.status = EXISTS
-            task.progress = 1.0
-            task.path = self.library.root / existing.file
-            task.message = "already downloaded"
-            self._push(task)
-            return
+            floor = min_bitrate(self.settings)
+            stale = floor and self.library.bitrate_of(existing) < floor
+            if not (self.upgrade and stale):
+                task.status = EXISTS
+                task.progress = 1.0
+                task.path = self.library.root / existing.file
+                task.message = "already downloaded"
+                self._push(task)
+                return
+            # Asked for explicitly: fetch the better stream over the same file.
+            task.replace_path = self.library.root / existing.file
 
         # A direct YouTube source already names the recording, so there is
         # nothing to search for and nothing to second-guess -- but it arrives
@@ -344,7 +356,9 @@ class Job:
                 self._push(_task)
 
             destination = (
-                self.library.root / upgrade[1].file if upgrade else self._reserve_path(task)
+                task.replace_path
+                or (self.library.root / upgrade[1].file if upgrade else None)
+                or self._reserve_path(task)
             )
             try:
                 result = fetch_audio(
@@ -363,9 +377,13 @@ class Job:
                 continue
 
             write_tags(result.path, task.track, candidate.url)
-            if upgrade:
+            superseded = upgrade[1].file if upgrade else (
+                task.replace_path.relative_to(self.library.root).as_posix()
+                if task.replace_path else None
+            )
+            if superseded:
                 # Everything that shared the old file shares the new one.
-                self.library.repoint(upgrade[1].file, result.path, result.bitrate)
+                self.library.repoint(superseded, result.path, result.bitrate)
             self.library.record(
                 track=task.track,
                 path=result.path,
@@ -457,6 +475,7 @@ class JobManager:
         track_ids: Iterable[str],
         library: Library,
         spotify: Any = None,
+        upgrade: bool = False,
     ) -> Job:
         job = Job(
             playlist,
@@ -465,6 +484,7 @@ class JobManager:
             library,
             asyncio.get_running_loop(),
             spotify=spotify,
+            upgrade=upgrade,
         )
         self.jobs[job.id] = job
         if len(self.jobs) > 20:  # keep memory bounded across a long session

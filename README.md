@@ -324,7 +324,11 @@ classic cases. It needs cookies, since itag 774 is only offered to a signed-in
 session.
 
 Switching to High doesn't re-download a library you already have — a track
-already on disk stays as it is. It does stop a *shared* recording being reused
+already on disk stays as it is, but it is now labelled with its bitrate and
+counted in the summary, and a **Below quality** selector picks exactly those.
+Selecting an already-downloaded track is taken as a request to fetch it again,
+so an upgrade is something you choose rather than something a setting triggers.
+The better stream replaces the file in place. It does stop a *shared* recording being reused
 at the lower bitrate: when one is fetched again at High, the better stream
 replaces the old file in place and every track pointing at it follows, rather
 than a second copy appearing beside the first.

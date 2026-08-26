@@ -322,6 +322,90 @@ class TestQualityAwareReuse:
         assert len(calls) == 1                 # nothing to upgrade
 
 
+class TestExplicitUpgrade:
+    """Re-fetching a track already on disk that sits below the setting.
+
+    Changing quality must not start a bulk re-download on its own, so this is
+    opt-in; but without it there is no way to lift an older library at all.
+    """
+
+    def _stub(self, monkeypatch, bitrate):
+        calls = []
+
+        def fake(cand, dest, on_progress=None, **kw):
+            calls.append(dest)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"audio")
+            return Result(path=dest, video_id=cand.video_id, bitrate=bitrate,
+                          duration_s=200.0)
+
+        monkeypatch.setattr("libber.jobs.fetch_audio", fake)
+        monkeypatch.setattr("libber.jobs.write_tags", lambda *a, **k: None)
+        monkeypatch.setattr("libber.matcher.search",
+                            lambda t: [candidate(video_id="vid", score=99.0)])
+        return calls
+
+    def _downloaded_at(self, job, track, kbps):
+        job.folder.mkdir(parents=True, exist_ok=True)
+        path = target_path(job.folder, track)
+        path.write_bytes(b"audio")
+        job.library.record(track, path, "vid", "t", "a", 100.0, bitrate=kbps)
+        return path
+
+    def test_left_alone_unless_asked(self, make_job, playlist, monkeypatch):
+        calls = self._stub(monkeypatch, 260)
+        pl = playlist(1)
+        job = make_job(pl, audio_quality="high")     # upgrade defaults to False
+        self._downloaded_at(job, pl.tracks[0], 130)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert job.tasks[pl.tracks[0].id].status == EXISTS
+        assert calls == []
+
+    def test_refetched_when_asked(self, make_job, playlist, monkeypatch):
+        calls = self._stub(monkeypatch, 260)
+        pl = playlist(1)
+        job = make_job(pl, audio_quality="high")
+        job.upgrade = True
+        self._downloaded_at(job, pl.tracks[0], 130)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert job.tasks[pl.tracks[0].id].status == DONE
+        assert len(calls) == 1
+
+    def test_the_new_file_replaces_the_old_one(self, make_job, playlist, monkeypatch):
+        """Not beside it: a second copy differing only in bitrate is the "(2)"
+        clutter this whole area keeps producing."""
+        self._stub(monkeypatch, 260)
+        pl = playlist(1)
+        job = make_job(pl, audio_quality="high")
+        job.upgrade = True
+        old = self._downloaded_at(job, pl.tracks[0], 130)
+        job._process(job.tasks[pl.tracks[0].id])
+
+        files = list(job.folder.glob("*.opus"))
+        assert len(files) == 1 and files[0] == old
+        assert job.library.entry(pl.tracks[0].id).bitrate == 260
+
+    def test_a_track_already_at_quality_is_untouched(self, make_job, playlist, monkeypatch):
+        calls = self._stub(monkeypatch, 260)
+        pl = playlist(1)
+        job = make_job(pl, audio_quality="high")
+        job.upgrade = True
+        self._downloaded_at(job, pl.tracks[0], 260)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert job.tasks[pl.tracks[0].id].status == EXISTS
+        assert calls == []
+
+    def test_standard_never_treats_anything_as_below(self, make_job, playlist, monkeypatch):
+        calls = self._stub(monkeypatch, 130)
+        pl = playlist(1)
+        job = make_job(pl, audio_quality="standard")
+        job.upgrade = True
+        self._downloaded_at(job, pl.tracks[0], 130)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert job.tasks[pl.tracks[0].id].status == EXISTS
+        assert calls == []
+
+
 class TestFilenameReservation:
     def test_distinct_tracks_never_share_a_filename(self, make_job, playlist, track):
         """Filenames carry no track number, so two entries can collapse onto

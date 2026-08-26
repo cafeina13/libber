@@ -28,6 +28,7 @@ from .config import (
     Settings,
     cookie_option,
     js_runtime,
+    min_bitrate,
     load_settings,
     probe_cookies,
     redirect_uri,
@@ -109,6 +110,10 @@ class PlaylistBody(BaseModel):
 class JobBody(BaseModel):
     playlist_id: str
     track_ids: list[str] = Field(default_factory=list)
+    # Re-fetch tracks already on disk that sit below the current quality.
+    # Off unless asked for, so changing the setting never starts a bulk
+    # re-download on its own.
+    upgrade: bool = False
 
 
 class RetryBody(BaseModel):
@@ -366,6 +371,9 @@ def _playlist_response(playlist: Playlist) -> dict[str, Any]:
     # Recover anything renamed or moved on disk before deciding what is
     # missing, otherwise a hand-renamed file reads as gone and downloads again.
     repair = library.reconcile()
+    floor = min_bitrate(state.settings)
+    sync = library.sync_report(playlist, floor)
+    below = set(sync["below_quality"])
     return {
         "repaired": repair["repaired"],
         "playlist": {
@@ -382,13 +390,16 @@ def _playlist_response(playlist: Playlist) -> dict[str, Any]:
             {
                 **t.to_dict(),
                 "downloaded": bool(library.entry(t.id)),
+                "bitrate": (library.bitrate_of(library.entry(t.id))
+                            if library.entry(t.id) else 0),
+                "below_quality": t.id in below,
                 # Carried from disk so a track parked for review is still shown
                 # as such after a reload, with the candidates already found.
                 "review": library.reviews().get(t.id),
             }
             for t in playlist.tracks
         ],
-        "sync": library.sync_report(playlist),
+        "sync": sync,
     }
 
 
@@ -414,7 +425,8 @@ async def create_job(body: JobBody) -> dict[str, Any]:
     if not track_ids:
         raise HTTPException(400, "No tracks selected.")
 
-    job = state.jobs.create(playlist, track_ids, state.library(), spotify=state.auth)
+    job = state.jobs.create(playlist, track_ids, state.library(),
+                            spotify=state.auth, upgrade=body.upgrade)
     job.start(state.jobs.pool)
     return {"job_id": job.id, "snapshot": job.snapshot()}
 

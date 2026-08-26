@@ -204,6 +204,9 @@ code {
 .track[data-status="done"] { border-color: #1c4b30; }
 .track[data-status="done"] .tstatus { color: var(--accent); }
 .track[data-status="exists"] { opacity: .62; }
+/* Downloaded, but at a lower bitrate than the current setting asks for. */
+.track[data-status="below"] { opacity: .78; border-color: #3a3320; }
+.track[data-status="below"] .tstatus { color: var(--warn); }
 .track[data-status="needs_review"] { border-color: #4a3a1c; }
 .track[data-status="needs_review"] .tstatus { color: var(--warn); }
 .track[data-status="error"] { border-color: #58262a; }

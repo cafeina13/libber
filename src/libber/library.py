@@ -286,16 +286,29 @@ class Library:
             }
 
     # -- reporting -------------------------------------------------------
-    def sync_report(self, playlist: Playlist) -> dict[str, Any]:
-        """What a run would actually do: new vs already-have vs removed."""
+    def sync_report(self, playlist: Playlist, min_bitrate: int = 0) -> dict[str, Any]:
+        """What a run would actually do: new vs already-have vs removed.
+
+        `below_quality` is the tracks that are downloaded but at a lower
+        bitrate than the current setting asks for. They still count as
+        existing -- switching quality does not silently re-fetch a library --
+        but naming them is what makes an upgrade something you can choose.
+        """
         have = self.known_ids()
         current = [t.id for t in playlist.tracks]
         previous = (self.playlist_state(playlist.id) or {}).get("track_ids", [])
+        below = []
+        if min_bitrate:
+            for tid in current:
+                found = self.entry(tid)
+                if found and self.bitrate_of(found) < min_bitrate:
+                    below.append(tid)
         return {
             "total": len(current),
             "new": [tid for tid in current if tid not in have],
             "existing": [tid for tid in current if tid in have],
             "removed": [tid for tid in previous if tid not in current],
+            "below_quality": below,
         }
 
 

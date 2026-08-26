@@ -201,6 +201,9 @@ function renderPlaylist(data) {
   if (sync.removed.length) {
     parts.push(`<span class="muted"><b>${sync.removed.length}</b> removed from playlist since last sync</span>`);
   }
+  if (sync.below_quality && sync.below_quality.length) {
+    parts.push(`<span class="muted"><b>${sync.below_quality.length}</b> below your quality setting</span>`);
+  }
   if (data.repaired) {
     parts.push(`<span class="muted"><b>${data.repaired}</b> re-linked after being renamed</span>`);
   }
@@ -208,6 +211,7 @@ function renderPlaylist(data) {
     parts.push(`<span class="muted"><b>${pl.skipped.length}</b> skipped (local files / episodes)</span>`);
   }
   $("sync-summary").innerHTML = parts.join("");
+  $("sel-below").hidden = !(sync.below_quality && sync.below_quality.length);
 
   const container = $("tracks");
   container.innerHTML = "";
@@ -227,8 +231,10 @@ function renderPlaylist(data) {
     artistEl.title = `${track.artist} · ${mmss(track.duration_ms)}`;
     if (track.album) artistEl.title += `\n${track.album}`;
     if (track.downloaded) {
-      row.dataset.status = "exists";
-      row.querySelector(".tstatus").textContent = "already downloaded";
+      row.dataset.status = track.below_quality ? "below" : "exists";
+      row.querySelector(".tstatus").textContent = track.below_quality
+        ? `${track.bitrate} kbps — below your setting`
+        : "already downloaded";
       row.querySelector(".tsel").checked = false;
     }
     container.appendChild(row);
@@ -261,7 +267,8 @@ function selectTracks(mode) {
     const box = row.querySelector(".tsel");
     if (mode === "all") box.checked = true;
     else if (mode === "none") box.checked = false;
-    else box.checked = row.dataset.status !== "exists" && row.dataset.status !== "done";
+    else if (mode === "below") box.checked = row.dataset.status === "below";
+    else box.checked = !["exists", "below", "done"].includes(row.dataset.status);
   });
   updateDownloadButton();
 }
@@ -289,9 +296,15 @@ async function startDownload() {
   banner($("job-banner"), `Matching ${ids.length} tracks on YouTube Music…`);
 
   try {
+    // Picking a track that is already on disk only makes sense as a request
+    // to fetch it again, so the upgrade is opt-in by that act alone.
+    const upgrade = ids.some((id) => {
+      const row = rows.get(id);
+      return row && row.dataset.status === "below";
+    });
     const data = await api("/api/jobs", {
       method: "POST",
-      body: { playlist_id: playlist.playlist.id, track_ids: ids },
+      body: { playlist_id: playlist.playlist.id, track_ids: ids, upgrade },
     });
     jobId = data.job_id;
     $("cancel-btn").classList.remove("hidden");
