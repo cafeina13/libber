@@ -98,7 +98,8 @@ class JobBody(BaseModel):
 
 class RetryBody(BaseModel):
     track_id: str
-    video_id: str
+    video_id: str = ""
+    url: str = ""      # a link pasted by hand, when no candidate is right
 
 
 class SettingsBody(BaseModel):
@@ -408,6 +409,11 @@ async def retry_track(job_id: str, body: RetryBody) -> dict[str, Any]:
     job = state.jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Unknown job.")
+    if body.url.strip():
+        problem = job.retry_url(body.track_id, body.url.strip(), state.jobs.pool)
+        if problem:
+            raise HTTPException(400, problem)
+        return {"ok": True}
     if not job.retry(body.track_id, body.video_id, state.jobs.pool):
         raise HTTPException(400, "That track or candidate isn't in this job.")
     return {"ok": True}

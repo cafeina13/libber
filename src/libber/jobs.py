@@ -21,6 +21,8 @@ from .download import DownloadFailed, fetch_audio, target_path, write_tags
 from .library import Library, folder_for, write_m3u
 from .matcher import Candidate
 from .spotify import Playlist, Track
+from .youtube import YouTubeError
+from .youtube import parse_source as parse_youtube
 
 def _direct_candidate(track: Track) -> Candidate:
     """Wrap an already-identified YouTube video as a perfect-score candidate."""
@@ -372,6 +374,39 @@ class Job:
         self.library.forget(track_id, delete_file=True)
         pool.submit(self._retry_worker, task, chosen)
         return True
+
+    def retry_url(self, track_id: str, url: str, pool: ThreadPoolExecutor) -> str:
+        """Download a specific YouTube link the user supplied by hand.
+
+        Some recordings simply aren't findable by search -- an obscure release,
+        a title the catalogue spells differently, a track only present on one
+        upload. The ranked picker can't help there, so accept the answer
+        directly rather than leaving the track permanently stuck.
+        """
+        task = self.tasks.get(track_id)
+        if not task:
+            return "That track isn't part of this job."
+        try:
+            kind, ident = parse_youtube(url)
+        except YouTubeError as exc:
+            return str(exc)
+        if kind != "yt-video":
+            return "That's a playlist link — paste a link to a single video."
+
+        chosen = Candidate(
+            video_id=ident,
+            title=task.track.title,     # tags come from the source track anyway
+            artists=list(task.track.artists),
+            album=task.track.album,
+            duration_s=task.track.duration_s,
+            source="manual",
+            score=100.0,
+        )
+        chosen.flags = ["picked by hand"]
+        task.candidates = [chosen, *task.candidates]
+        self.library.forget(track_id, delete_file=True)
+        pool.submit(self._retry_worker, task, chosen)
+        return ""
 
     def _retry_worker(self, task: Task, candidate: Candidate) -> None:
         """A retry lands after the job already finished, so it has to do the

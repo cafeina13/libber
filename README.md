@@ -25,7 +25,9 @@ codebase is about.
   remix, cover, karaoke, sped-up, extended. Anything suspicious is held for
   review instead of silently downloading the wrong take.
 - **Fix-match picker.** Anything held for review shows the ranked alternatives
-  with a preview link; pick one and it re-downloads.
+  with a preview link; pick one and it re-downloads. When none of them is the
+  recording — or search found nothing at all — paste the YouTube link yourself
+  and it downloads that instead.
 - **Cheap re-syncs.** A `library.json` tracks what's on disk, so running the
   same playlist again only fetches what's genuinely new. Delete a file and it
   comes back next run.

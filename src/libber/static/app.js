@@ -346,10 +346,12 @@ function applyTask(task) {
     matchEl.removeAttribute("title");
   }
 
+  // Offered even with no candidates: a track search couldn't place at all is
+  // exactly the one that needs a link pasted by hand.
   const fix = row.querySelector(".tfix");
-  const fixable = task.candidates && task.candidates.length > 1 &&
-    ["needs_review", "done", "error"].includes(task.status);
+  const fixable = ["needs_review", "done", "error"].includes(task.status);
   fix.classList.toggle("hidden", !fixable);
+  fix.textContent = (task.candidates || []).length ? "Fix match" : "Add link";
   if (fixable) fix.onclick = () => togglePicker(row, task);
 }
 
@@ -359,7 +361,7 @@ function togglePicker(row, task) {
 
   const picker = document.createElement("div");
   picker.className = "picker";
-  task.candidates.forEach((cand) => {
+  (task.candidates || []).forEach((cand) => {
     const item = document.createElement("div");
     item.className = "cand";
 
@@ -411,6 +413,42 @@ function togglePicker(row, task) {
     item.append(info, actions);
     picker.appendChild(item);
   });
+
+  // Last resort: none of the candidates is the recording, so take a link.
+  const manual = document.createElement("div");
+  manual.className = "cand manual";
+  const field = document.createElement("input");
+  field.type = "text";
+  field.placeholder = "…or paste the YouTube link for this track";
+  field.spellcheck = false;
+  const go = document.createElement("button");
+  go.className = "ghost tiny";
+  go.textContent = "Use link";
+
+  const submit = async () => {
+    const url = field.value.trim();
+    if (!url) { field.focus(); return; }
+    go.disabled = true;
+    picker.remove();
+    row.dataset.status = "downloading";
+    row.querySelector(".tstatus").textContent = "downloading your link…";
+    row.querySelector(".tfill").style.width = "0%";
+    if (!stream && jobId) listen(jobId);
+    try {
+      await api(`/api/jobs/${jobId}/retry`, {
+        method: "POST",
+        body: { track_id: task.id, url },
+      });
+    } catch (err) {
+      row.dataset.status = "error";
+      row.querySelector(".tstatus").textContent = err.message;
+    }
+  };
+  go.onclick = submit;
+  field.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+  manual.append(field, go);
+  picker.appendChild(manual);
+
   row.appendChild(picker);
 }
 

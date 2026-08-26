@@ -7,6 +7,7 @@ reuse, retry, rename), not the downloading.
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -15,7 +16,7 @@ from libber.download import Result, target_path
 from libber.jobs import DONE, ERROR, EXISTS, REVIEW, Job, _direct_candidate
 from libber.library import Library
 from libber.matcher import Candidate
-from libber.models import Playlist
+from libber.models import Playlist, Track
 
 
 @pytest.fixture
@@ -325,6 +326,72 @@ class TestFixMatch:
         # Both bail out before the pool is touched, so None is safe to pass.
         assert job.retry("nosuchtrack", "g" * 11, None) is False
         assert job.retry(task.track.id, "nosuchvideo", None) is False
+
+
+class TestManualLink:
+    """Pasting a link by hand.
+
+    Search cannot place every recording -- an obscure release, a title the
+    catalogue spells differently, a track present on exactly one upload. The
+    ranked picker is no help there, so a link is accepted directly. This has to
+    work when the matcher returned nothing at all, which is precisely when it
+    is needed.
+    """
+
+    def _stuck_track(self, make_job, monkeypatch, stub_download):
+        pl = Playlist(id="pl", kind="playlist", name="P", tracks=[
+            Track(id="a" * 22, title="Obscure", artists=["Rare"], album="Al",
+                  duration_ms=200_000)])
+        monkeypatch.setattr("libber.matcher.search", lambda t: [])
+        job = make_job(pl)
+        task = job.tasks["a" * 22]
+        job._process(task)
+        assert task.status == ERROR and not task.candidates
+        return job, task
+
+    def test_works_with_no_candidates_at_all(self, make_job, monkeypatch, stub_download):
+        job, task = self._stuck_track(make_job, monkeypatch, stub_download)
+        pool = ThreadPoolExecutor(max_workers=1)
+        assert job.retry_url(task.track.id, "https://youtu.be/dQw4w9WgXcQ", pool) == ""
+        pool.shutdown(wait=True)
+        assert task.status == DONE
+        assert stub_download[0][0] == "dQw4w9WgXcQ"
+
+    def test_result_is_recorded_and_survives_a_restart(self, make_job, monkeypatch,
+                                                       stub_download, tmp_path):
+        job, task = self._stuck_track(make_job, monkeypatch, stub_download)
+        pool = ThreadPoolExecutor(max_workers=1)
+        job.retry_url(task.track.id, "https://youtu.be/dQw4w9WgXcQ", pool)
+        pool.shutdown(wait=True)
+        entry = Library(tmp_path).entry(task.track.id)
+        assert entry is not None and entry.video_id == "dQw4w9WgXcQ"
+
+    def test_marked_as_hand_picked(self, make_job, monkeypatch, stub_download):
+        job, task = self._stuck_track(make_job, monkeypatch, stub_download)
+        pool = ThreadPoolExecutor(max_workers=1)
+        job.retry_url(task.track.id, "https://youtu.be/dQw4w9WgXcQ", pool)
+        pool.shutdown(wait=True)
+        assert "picked by hand" in task.chosen.flags
+
+    @pytest.mark.parametrize(
+        "url, expected",
+        [
+            ("", "YouTube link"),
+            ("not a link", "YouTube link"),
+            ("https://open.spotify.com/track/abc", "YouTube link"),
+            ("https://www.youtube.com/playlist?list=PLabc123", "single video"),
+        ],
+    )
+    def test_bad_links_are_refused_with_a_reason(self, make_job, monkeypatch,
+                                                 stub_download, url, expected):
+        job, task = self._stuck_track(make_job, monkeypatch, stub_download)
+        problem = job.retry_url(task.track.id, url, None)
+        assert expected in problem
+        assert stub_download == []
+
+    def test_unknown_track_is_refused(self, make_job, monkeypatch, stub_download):
+        job, _ = self._stuck_track(make_job, monkeypatch, stub_download)
+        assert "isn't part of this job" in job.retry_url("nope", "https://youtu.be/dQw4w9WgXcQ", None)
 
 
 class TestCancellation:
