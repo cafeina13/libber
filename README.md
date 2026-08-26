@@ -30,7 +30,14 @@ codebase is about.
   same playlist again only fetches what's genuinely new. Delete a file and it
   comes back next run.
 - **`.m3u8` playlist file** written in playlist order with relative paths, so
-  the whole folder can be copied to a phone and still open correctly.
+  the library can be copied to a phone and still open correctly. Copy the whole
+  download folder rather than one playlist — a playlist may reference tracks
+  living in another one (see below).
+- **Each recording downloaded once.** A track already on disk from another
+  playlist isn't fetched again, and two Spotify ids that resolve to the same
+  video share one file. The playlists still list it: the `.m3u8` points at
+  wherever the file actually lives, `../Other Playlist/Track.opus` included, so
+  every playlist plays in full.
 
 ## Requirements
 
@@ -159,6 +166,14 @@ Then the penalties, which are what actually catch bad matches:
   "Bohemian Rhapsody" outranks Queen's.
 - **Wildly wrong length** — under 85% or over 125% of the expected runtime is an
   excerpt, a full-album upload, or an extended mix, not the track.
+
+Artists written in **different scripts are not compared at all**. Spotify
+romanises names that YouTube Music leaves in their own script, so `Yousei
+Teikoku` and `妖精帝國` are one act with no characters in common. Scoring that as
+a mismatch buried correct official releases below fan uploads, so when the two
+names share no writing system the artist is neither credited nor penalised and
+title and duration decide. Covers by a genuinely different artist in the same
+script are still caught.
 
 Anything tripping those is marked *risky* and parked for review no matter how
 well it scored otherwise. Tracks scoring below the confidence threshold (70 by
@@ -329,6 +344,7 @@ skipped every track in a 655-track playlist while looking like it worked.
 | `test_jobs.py` | skip / review / reuse / retry / rename decisions |
 | `test_server.py` | routes, validation, error messages |
 | `test_library.py` | sync reports, dedup, `.m3u8`, filenames |
+| `test_config.py` | settings persistence, cookie probing, quality selection |
 | `test_spotify.py`, `test_youtube.py` | link parsing, response shaping |
 | `test_enrich.py` | when metadata is accepted, and when it's refused |
 | `test_download.py` | tag round-trip against a real Opus file |
