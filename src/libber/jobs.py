@@ -222,16 +222,10 @@ class Job:
             # karaoke, wrong length) rather than a merely weak match, so it goes
             # to review no matter how well it scored on title and artist.
             if best.risky:
-                task.status = REVIEW
-                task.chosen = best
-                task.message = f"Best hit looks like a {best.flags[0]} — check it."
-                self._push(task)
+                self._park(task, best, f"Best hit looks like a {best.flags[0]} — check it.")
                 return
             if best.score < self.settings.match_threshold:
-                task.status = REVIEW
-                task.chosen = best
-                task.message = "Low-confidence match — pick one yourself."
-                self._push(task)
+                self._park(task, best, "Low-confidence match — pick one yourself.")
                 return
 
         self._download(task, task.candidates[:3])
@@ -260,6 +254,20 @@ class Job:
         if not found:
             found = enrich.from_youtube(task.track)
         task.message = f"album: {found}" if found else ""
+
+    def _park(self, task: Task, best: Candidate, message: str) -> None:
+        """Hold a track for review, and write the queue to disk.
+
+        Persisting it is what lets the decision wait: come back tomorrow, or
+        after a restart, and the track is still listed with the candidates
+        already found rather than needing the whole playlist re-searched.
+        """
+        task.status = REVIEW
+        task.chosen = best
+        task.message = message
+        self.library.record_review(task.track, task.candidates, message)
+        self.library.save()
+        self._push(task)
 
     def _reserve_path(self, task: Task) -> Path:
         """Claim a free filename for this track.

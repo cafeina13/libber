@@ -50,13 +50,14 @@ class Library:
     # -- persistence -----------------------------------------------------
     def _read(self) -> dict[str, Any]:
         if not self.state_path.exists():
-            return {"version": VERSION, "tracks": {}, "playlists": {}}
+            return {"version": VERSION, "tracks": {}, "playlists": {}, "review": {}}
         try:
             data = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return {"version": VERSION, "tracks": {}, "playlists": {}}
+            return {"version": VERSION, "tracks": {}, "playlists": {}, "review": {}}
         data.setdefault("tracks", {})
         data.setdefault("playlists", {})
+        data.setdefault("review", {})
         return data
 
     def save(self) -> None:
@@ -120,6 +121,32 @@ class Library:
     def playlist_state(self, playlist_id: str) -> dict[str, Any] | None:
         return self._data["playlists"].get(playlist_id)
 
+    # -- review queue ----------------------------------------------------
+    # Tracks the matcher wouldn't guess at. Kept on disk because the queue is
+    # the whole point of a confidence threshold: without this, closing the page
+    # loses which tracks need attention and every candidate found for them, and
+    # rediscovering that means re-searching the entire playlist.
+    def reviews(self) -> dict[str, Any]:
+        return self._data.setdefault("review", {})
+
+    def record_review(
+        self, track: Track, candidates: list[Any], message: str
+    ) -> None:
+        with self._lock:
+            self.reviews()[track.id] = {
+                "title": track.title,
+                "artist": track.artist,
+                "album": track.album,
+                "duration_ms": track.duration_ms,
+                "message": message,
+                "at": _now(),
+                "candidates": [c.to_dict() for c in candidates[:6]],
+            }
+
+    def clear_review(self, track_id: str) -> None:
+        with self._lock:
+            self.reviews().pop(track_id, None)
+
     # -- mutations -------------------------------------------------------
     def record(
         self, track: Track, path: Path, video_id: str, title: str, artist: str, score: float
@@ -133,6 +160,9 @@ class Library:
                 score=round(score, 1),
                 at=_now(),
             ).to_dict()
+            # A downloaded track is no longer awaiting a decision, however it
+            # got there -- matched, reused, or a link pasted by hand.
+            self._data.setdefault("review", {}).pop(track.id, None)
 
     def forget(self, track_id: str, delete_file: bool = False) -> None:
         with self._lock:

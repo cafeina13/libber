@@ -36,6 +36,7 @@ from .config import (
 )
 from .jobs import JobManager
 from .library import Library
+from .matcher import Candidate
 from .models import Playlist
 from .spotify import SpotifyAuth, SpotifyError
 from .spotify import fetch as fetch_playlist
@@ -100,6 +101,13 @@ class RetryBody(BaseModel):
     track_id: str
     video_id: str = ""
     url: str = ""      # a link pasted by hand, when no candidate is right
+
+
+class FixBody(BaseModel):
+    playlist_id: str
+    track_id: str
+    video_id: str = ""
+    url: str = ""
 
 
 class SettingsBody(BaseModel):
@@ -353,7 +361,13 @@ def _playlist_response(playlist: Playlist) -> dict[str, Any]:
             "direct": playlist.is_direct,
         },
         "tracks": [
-            {**t.to_dict(), "downloaded": bool(library.entry(t.id))}
+            {
+                **t.to_dict(),
+                "downloaded": bool(library.entry(t.id)),
+                # Carried from disk so a track parked for review is still shown
+                # as such after a reload, with the candidates already found.
+                "review": library.reviews().get(t.id),
+            }
             for t in playlist.tracks
         ],
         "sync": library.sync_report(playlist),
@@ -417,6 +431,35 @@ async def retry_track(job_id: str, body: RetryBody) -> dict[str, Any]:
     if not job.retry(body.track_id, body.video_id, state.jobs.pool):
         raise HTTPException(400, "That track or candidate isn't in this job.")
     return {"ok": True}
+
+
+@app.post("/api/fix")
+async def fix_track(body: FixBody) -> dict[str, Any]:
+    """Act on a review-queue entry without an existing job.
+
+    The queue outlives the session it was created in, so fixing a track has to
+    work from a freshly loaded page. A one-track job is spun up and seeded with
+    the candidates stored on disk, which also gives the UI progress to stream.
+    """
+    playlist = state.playlists.get(body.playlist_id)
+    if not playlist:
+        raise HTTPException(404, "Load the playlist again — the server restarted.")
+    if not any(t.id == body.track_id for t in playlist.tracks):
+        raise HTTPException(404, "That track isn't in this playlist.")
+
+    library = state.library()
+    job = state.jobs.create(playlist, [body.track_id], library, spotify=state.auth)
+    task = job.tasks[body.track_id]
+    stored = library.reviews().get(body.track_id) or {}
+    task.candidates = [Candidate.from_dict(c) for c in stored.get("candidates", [])]
+
+    if body.url.strip():
+        problem = job.retry_url(body.track_id, body.url.strip(), state.jobs.pool)
+        if problem:
+            raise HTTPException(400, problem)
+    elif not job.retry(body.track_id, body.video_id, state.jobs.pool):
+        raise HTTPException(400, "That candidate is no longer on file — reload the playlist.")
+    return {"job_id": job.id, "snapshot": job.snapshot()}
 
 
 @app.get("/api/jobs/{job_id}/events")

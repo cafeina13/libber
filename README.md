@@ -28,6 +28,9 @@ codebase is about.
   with a preview link; pick one and it re-downloads. When none of them is the
   recording — or search found nothing at all — paste the YouTube link yourself
   and it downloads that instead.
+- **The review queue waits for you.** Held tracks are written to disk with the
+  candidates already found, so they're still listed after a restart and can be
+  dealt with days later without re-searching the playlist.
 - **Cheap re-syncs.** A `library.json` tracks what's on disk, so running the
   same playlist again only fetches what's genuinely new. Delete a file and it
   comes back next run.

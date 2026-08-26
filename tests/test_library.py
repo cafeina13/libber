@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from libber.download import safe_name, target_path
@@ -134,6 +137,67 @@ class TestDedup:
         path = put(library, pl.tracks[0], folder)
         assert library.owner_of(path) == pl.tracks[0].id
         assert library.owner_of(folder / "nothing.opus") is None
+
+
+class TestReviewQueue:
+    """Tracks the matcher wouldn't guess at are kept on disk.
+
+    The queue is the point of having a confidence threshold: the decision is
+    meant to wait. Holding it only in memory meant closing the page lost which
+    tracks needed attention and every candidate found for them, and getting
+    that back meant re-searching the whole playlist.
+    """
+
+    def test_empty_by_default(self, library):
+        assert library.reviews() == {}
+
+    def test_records_what_is_needed_to_decide_later(self, library, playlist):
+        pl = playlist(1)
+        track = pl.tracks[0]
+        cands = [
+            SimpleNamespace(to_dict=lambda: {"video_id": "a" * 11, "score": 95.0}),
+            SimpleNamespace(to_dict=lambda: {"video_id": "b" * 11, "score": 60.0}),
+        ]
+        library.record_review(track, cands, "looks like a live version")
+        entry = library.reviews()[track.id]
+        assert entry["title"] == track.title
+        assert entry["message"] == "looks like a live version"
+        assert [c["video_id"] for c in entry["candidates"]] == ["a" * 11, "b" * 11]
+
+    def test_survives_a_reload(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        library.record_review(pl.tracks[0], [], "needs a look")
+        library.save()
+        assert pl.tracks[0].id in Library(tmp_path).reviews()
+
+    def test_downloading_clears_it(self, library, playlist):
+        """However the track gets downloaded -- matched, reused, or a link
+        pasted by hand -- it is no longer awaiting a decision."""
+        pl = playlist(1)
+        track = pl.tracks[0]
+        library.record_review(track, [], "needs a look")
+        folder = folder_for(library.root, pl)
+        put(library, track, folder)
+        assert track.id not in library.reviews()
+
+    def test_cleared_explicitly(self, library, playlist):
+        pl = playlist(1)
+        library.record_review(pl.tracks[0], [], "needs a look")
+        library.clear_review(pl.tracks[0].id)
+        assert library.reviews() == {}
+
+    def test_only_the_first_few_candidates_are_kept(self, library, playlist):
+        pl = playlist(1)
+        cands = [SimpleNamespace(to_dict=lambda i=i: {"video_id": str(i)}) for i in range(20)]
+        library.record_review(pl.tracks[0], cands, "x")
+        assert len(library.reviews()[pl.tracks[0].id]["candidates"]) <= 6
+
+    def test_old_state_files_without_a_review_section_still_load(self, tmp_path):
+        state = tmp_path / ".libber" / "library.json"
+        state.parent.mkdir(parents=True)
+        state.write_text(json.dumps({"version": 1, "tracks": {}, "playlists": {}}),
+                         encoding="utf-8")
+        assert Library(tmp_path).reviews() == {}
 
 
 class TestM3U:

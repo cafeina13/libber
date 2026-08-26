@@ -138,6 +138,22 @@ class Candidate:
     def url(self) -> str:
         return f"https://music.youtube.com/watch?v={self.video_id}"
 
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "Candidate":
+        """Rebuild a candidate stored in the review queue on disk."""
+        artist = raw.get("artist") or ""
+        return cls(
+            video_id=raw.get("video_id", ""),
+            title=raw.get("title", ""),
+            artists=[a.strip() for a in artist.split(",") if a.strip()],
+            album=raw.get("album", ""),
+            duration_s=float(raw.get("duration_s") or 0),
+            source=raw.get("source", "song"),
+            score=float(raw.get("score") or 0),
+            flags=list(raw.get("flags") or []),
+            risky=bool(raw.get("risky")),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "video_id": self.video_id,

@@ -230,6 +230,22 @@ function renderPlaylist(data) {
     }
     container.appendChild(row);
     rows.set(track.id, row);
+
+    // After rows.set: applyTask looks the row up by id, so it has to exist.
+    if (!track.downloaded && track.review) {
+      // Parked in an earlier session; the queue is kept on disk.
+      row.querySelector(".tsel").checked = false;
+      applyTask({
+        id: track.id,
+        index: i + 1,
+        track,
+        status: "needs_review",
+        progress: 0,
+        message: track.review.message || "needs review",
+        match: (track.review.candidates || [])[0] || null,
+        candidates: track.review.candidates || [],
+      });
+    }
   });
 
   $("playlist").classList.remove("hidden");
@@ -355,6 +371,29 @@ function applyTask(task) {
   if (fixable) fix.onclick = () => togglePicker(row, task);
 }
 
+// A review entry outlives the job that created it, so fixing one has to work
+// with no live job — and with a stale one, after a server restart.
+async function sendFix(task, choice) {
+  if (jobId) {
+    try {
+      await api(`/api/jobs/${jobId}/retry`, {
+        method: "POST",
+        body: { track_id: task.id, ...choice },
+      });
+      return;
+    } catch (err) {
+      if (err.status !== 404) throw err;
+      jobId = null;   // job is gone; fall through to the standalone route
+    }
+  }
+  const data = await api("/api/fix", {
+    method: "POST",
+    body: { playlist_id: playlist.playlist.id, track_id: task.id, ...choice },
+  });
+  jobId = data.job_id;
+  listen(jobId);
+}
+
 function togglePicker(row, task) {
   const open = row.querySelector(".picker");
   if (open) { open.remove(); return; }
@@ -399,10 +438,7 @@ function togglePicker(row, task) {
       row.querySelector(".tfill").style.width = "0%";
       if (!stream && jobId) listen(jobId);   // reconnect if the stream dropped
       try {
-        await api(`/api/jobs/${jobId}/retry`, {
-          method: "POST",
-          body: { track_id: task.id, video_id: cand.video_id },
-        });
+        await sendFix(task, { video_id: cand.video_id });
       } catch (err) {
         row.dataset.status = "error";
         row.querySelector(".tstatus").textContent = err.message;
@@ -435,10 +471,7 @@ function togglePicker(row, task) {
     row.querySelector(".tfill").style.width = "0%";
     if (!stream && jobId) listen(jobId);
     try {
-      await api(`/api/jobs/${jobId}/retry`, {
-        method: "POST",
-        body: { track_id: task.id, url },
-      });
+      await sendFix(task, { url });
     } catch (err) {
       row.dataset.status = "error";
       row.querySelector(".tstatus").textContent = err.message;
