@@ -3,6 +3,8 @@ name = "libber"
 version = "0.1.0"
 description = "Build an offline music library from Spotify and YouTube playlists"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "cafeina13", email = "99685198+cafeina13@users.noreply.github.com" }
 ]

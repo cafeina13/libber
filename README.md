@@ -545,6 +545,15 @@ a stream does. If you subscribe to the services you're pulling from, the
 marginal difference is small — but it isn't nothing, and it's the honest cost of
 doing this.
 
+## Licence
+
+[MIT](LICENSE) — use it, change it, ship it, keep the copyright notice.
+
+That covers the code. It says nothing about what you download with it: see
+[Where this stands legally](#where-this-stands-legally) above, and note the
+"no warranty, no liability" clauses, which are the part of MIT that actually
+matters here.
+
 ## Notes
 
 - Local files and podcast episodes in a playlist are skipped — there's nothing
