@@ -307,6 +307,7 @@ async function startDownload() {
       body: { playlist_id: playlist.playlist.id, track_ids: ids, upgrade },
     });
     jobId = data.job_id;
+    resetCancelButton();
     $("cancel-btn").classList.remove("hidden");
     listen(jobId);
   } catch (err) {
@@ -513,14 +514,14 @@ function finishJob(data) {
   let text = bits.length ? bits.join(" · ") : "Nothing to do";
   if (data.stopped_early) {
     banner($("job-banner"), data.stopped_early, "error");
-    $("cancel-btn").classList.add("hidden");
+    resetCancelButton();
     updateDownloadButton();
     return;
   }
   if (data.m3u) text += " — .m3u8 written";
   banner($("job-banner"), `${text}. Saved to ${data.folder}`, kind);
 
-  $("cancel-btn").classList.add("hidden");
+  resetCancelButton();
   // The stream stays open: "Fix match" re-downloads after the job has
   // reported done, and those updates arrive on this same connection.
   updateDownloadButton();
@@ -541,8 +542,29 @@ $("yt-url").addEventListener("keydown", (e) => { if (e.key === "Enter") loadFrom
 $("signin-btn").onclick = startLogin;
 $("download-btn").onclick = startDownload;
 
+function resetCancelButton() {
+  const btn = $("cancel-btn");
+  btn.classList.add("hidden");
+  btn.disabled = false;
+  btn.textContent = "Stop";
+}
+
 $("cancel-btn").onclick = async () => {
-  if (jobId) await api(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+  if (!jobId) return;
+  const btn = $("cancel-btn");
+  // Cancelling only stops tracks that haven't started; whatever is already
+  // downloading runs to the end, which can be several seconds. Without saying
+  // so the button looks broken.
+  btn.disabled = true;
+  btn.textContent = "Stopping…";
+  banner($("job-banner"), "Stopping — downloads already in progress will finish first.");
+  try {
+    await api(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Stop";
+    banner($("job-banner"), err.message, "error");
+  }
 };
 
 document.querySelectorAll("[data-select]").forEach((btn) => {
