@@ -188,31 +188,54 @@ const FILTERS = {
   below: (st) => st === "below",
   have: (st) => ["exists", "below", "done"].includes(st),
 };
-let activeFilter = "all";
+// Nothing picked means everything shows; picking several widens the view
+// rather than narrowing it, since a track has only one status at a time.
+const activeFilters = new Set();
+
+// Folded to bare letters, so "gecmis" finds "Geçmiş" and the dotted/dotless i
+// pair doesn't decide whether a Turkish title can be searched for at all.
+function fold(text) {
+  return (text || "")
+    .replace(/[İıI]/g, "i")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
 function applyFilter() {
-  const text = $("filter-text").value.trim().toLowerCase();
-  const wanted = FILTERS[activeFilter];
+  const text = fold($("filter-text").value.trim());
+
+  // Which statuses exist at all, worked out before filtering: a chip that can
+  // show nothing is hidden, and dropped if it was picked, so it can't leave an
+  // empty list with no visible way back.
+  const present = new Set();
+  rows.forEach((row) => present.add(row.dataset.status));
+  document.querySelectorAll(".chip").forEach((chip) => {
+    const test = FILTERS[chip.dataset.show];
+    chip.hidden = Boolean(test) && ![...present].some(test);
+    if (chip.hidden) activeFilters.delete(chip.dataset.show);
+  });
+
+  const tests = [...activeFilters].map((key) => FILTERS[key]).filter(Boolean);
   let shown = 0;
-  const present = new Set();          // gathered in the same pass, not per chip
   rows.forEach((row) => {
-    const status = row.dataset.status;
-    present.add(status);
-    const byStatus = !wanted || wanted(status);
+    const byStatus = !tests.length || tests.some((test) => test(row.dataset.status));
     const byText = !text || (row.dataset.search || "").includes(text);
     const visible = byStatus && byText;
     row.classList.toggle("nomatch", !visible);
     if (visible) shown += 1;
   });
+
+  document.querySelectorAll(".chip").forEach((chip) => {
+    const key = chip.dataset.show;
+    chip.classList.toggle(
+      "on", key === "all" ? activeFilters.size === 0 : activeFilters.has(key)
+    );
+  });
+
   const total = rows.size;
   $("filter-count").textContent =
     shown === total ? `${total} tracks` : `${shown} of ${total}`;
-
-  // Hide chips that would show nothing, so the bar reflects this playlist.
-  document.querySelectorAll(".chip").forEach((chip) => {
-    const test = FILTERS[chip.dataset.show];
-    chip.hidden = Boolean(test) && ![...present].some(test);
-  });
 }
 
 function renderPlaylist(data) {
@@ -257,6 +280,7 @@ function renderPlaylist(data) {
   data.tracks.forEach((track, i) => {
     const row = template.content.firstElementChild.cloneNode(true);
     row.dataset.id = track.id;
+    row.dataset.search = fold(`${track.title} ${track.artist} ${track.album || ""}`);
     row.querySelector(".tnum").textContent = i + 1;
     row.querySelector(".tart").src = track.cover_url || "";
     const titleEl = row.querySelector(".ttitle");
@@ -450,8 +474,24 @@ async function sendFix(task, choice) {
     method: "POST",
     body: { playlist_id: playlist.playlist.id, track_id: task.id, ...choice },
   });
-  jobId = data.job_id;
-  listen(jobId);
+  // Fixing one track spins up a job of its own. Taking over the main stream
+  // would freeze a download still in progress, so it gets its own instead.
+  if (jobId) listenAside(data.job_id);
+  else { jobId = data.job_id; listen(jobId); }
+}
+
+// A second stream, for a one-track fix running beside the main job. Rows are
+// updated by task id, so the two never collide; the job-finished event is not
+// acted on here, since that banner and those buttons belong to the main job.
+function listenAside(id) {
+  const aside = new EventSource(`/api/jobs/${id}/events`);
+  aside.onmessage = (msg) => {
+    const data = JSON.parse(msg.data);
+    if (data.event === "snapshot") data.snapshot.tasks.forEach(applyTask);
+    else if (data.event === "task") applyTask(data.task);
+    else if (data.event === "job") aside.close();
+  };
+  aside.onerror = () => aside.close();
 }
 
 function togglePicker(row, task) {
@@ -613,9 +653,11 @@ $("cancel-btn").onclick = async () => {
 $("filter-text").addEventListener("input", applyFilter);
 document.querySelectorAll(".chip").forEach((chip) => {
   chip.onclick = () => {
-    activeFilter = chip.dataset.show;
-    document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === chip));
-    applyFilter();
+    const key = chip.dataset.show;
+    // Clicking a picked chip unpicks it; "All" is just the empty selection.
+    if (key === "all") activeFilters.clear();
+    else if (!activeFilters.delete(key)) activeFilters.add(key);
+    applyFilter();      // repaints the chips from the selection
   };
 });
 

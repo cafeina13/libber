@@ -215,6 +215,40 @@ class TestJobs:
         assert client.get(f"/api/jobs/{body['job_id']}").status_code == 200
         assert client.post(f"/api/jobs/{body['job_id']}/cancel").json() == {"ok": True}
 
+    def test_fixing_a_track_outside_the_job_is_a_404(self, client, monkeypatch):
+        """A download covers only the ticked tracks, so fixing an older one
+        lands on a job that has never heard of it. 404 is what makes the page
+        fall back to the standalone route instead of showing an error and
+        making you load the playlist again."""
+        monkeypatch.setattr("libber.server.fetch_playlist",
+                            lambda auth, url: sample_playlist(n=3))
+        monkeypatch.setattr("libber.jobs.Job.start", lambda self, pool: None)
+        loaded = client.post("/api/playlist", json={"url": "spotify:playlist:x"}).json()
+        picked, other = loaded["tracks"][0]["id"], loaded["tracks"][2]["id"]
+
+        job = client.post("/api/jobs", json={"playlist_id": loaded["playlist"]["id"],
+                                             "track_ids": [picked]}).json()
+        r = client.post(f"/api/jobs/{job['job_id']}/retry",
+                        json={"track_id": other, "video_id": "v" * 11})
+        assert r.status_code == 404
+        assert "isn't part of this job" in r.json()["detail"]
+
+    def test_a_bad_candidate_for_a_track_in_the_job_stays_a_400(
+        self, client, monkeypatch
+    ):
+        """Still a real error: the track is here, the chosen video is not."""
+        monkeypatch.setattr("libber.server.fetch_playlist",
+                            lambda auth, url: sample_playlist())
+        monkeypatch.setattr("libber.jobs.Job.start", lambda self, pool: None)
+        loaded = client.post("/api/playlist", json={"url": "spotify:playlist:x"}).json()
+        picked = loaded["tracks"][0]["id"]
+
+        job = client.post("/api/jobs", json={"playlist_id": loaded["playlist"]["id"],
+                                             "track_ids": [picked]}).json()
+        r = client.post(f"/api/jobs/{job['job_id']}/retry",
+                        json={"track_id": picked, "video_id": "not-a-candidate"})
+        assert r.status_code == 400
+
     def test_empty_selection_downloads_the_whole_playlist(self, client, monkeypatch):
         monkeypatch.setattr("libber.server.fetch_playlist",
                             lambda auth, url: sample_playlist(n=3))

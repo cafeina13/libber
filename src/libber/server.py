@@ -456,6 +456,12 @@ async def retry_track(job_id: str, body: RetryBody) -> dict[str, Any]:
     job = state.jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Unknown job.")
+    if body.track_id not in job.tasks:
+        # A download covers only the tracks that were ticked, so fixing an older
+        # one lands here. 404 rather than 400: the page reads it as "not in this
+        # job" and falls back to the standalone route, which builds a one-track
+        # job from the review queue instead of making you load the list again.
+        raise HTTPException(404, "That track isn't part of this job.")
     if body.url.strip():
         problem = job.retry_url(body.track_id, body.url.strip(), state.jobs.pool)
         if problem:
