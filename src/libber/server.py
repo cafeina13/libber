@@ -371,6 +371,9 @@ def _playlist_response(playlist: Playlist) -> dict[str, Any]:
     # Recover anything renamed or moved on disk before deciding what is
     # missing, otherwise a hand-renamed file reads as gone and downloads again.
     repair = library.reconcile()
+    # Pick up titles edited by hand while the files are still on disk, so a
+    # later re-download restores the edit instead of overwriting it.
+    library.absorb_edits(playlist.tracks)
     floor = min_bitrate(state.settings)
     sync = library.sync_report(playlist, floor)
     below = set(sync["below_quality"])

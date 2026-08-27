@@ -739,3 +739,91 @@ class TestSnapshot:
         assert snap["counts"]["pending"] == 3
         assert [t["index"] for t in snap["tasks"]] == [1, 2, 3]
         assert snap["playlist"]["name"] == pl.name
+
+
+class TestEditedTitlesSurviveRedownload:
+    """Two releases of one song share a title, so the only way to separate them
+    in a flat song list is to edit the tag. Re-downloading wrote the Spotify
+    title straight back over it."""
+
+    def _capture(self, monkeypatch):
+        seen: dict = {}
+        monkeypatch.setattr("libber.jobs.write_tags",
+                            lambda *a, **k: seen.update(k))
+        return seen
+
+    def test_stored_edit_reaches_the_tagger(
+        self, make_job, playlist, stub_download, monkeypatch
+    ):
+        """The file was deleted, so there is nothing on disk to read the edit
+        back from -- the library has to remember it."""
+        seen = self._capture(monkeypatch)
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=95.0)])
+        pl = playlist(1)
+        track = pl.tracks[0]
+        job = make_job(pl)
+        job.folder.mkdir(parents=True, exist_ok=True)
+        path = target_path(job.folder, track)
+        path.write_bytes(b"old audio")
+        job.library.record(track, path, "vid", "t", "a", 100.0,
+                           custom_title="Yalan (Canlı)")
+        path.unlink()               # file gone, edit not
+
+        job._process(job.tasks[track.id])
+        assert job.tasks[track.id].status == DONE
+        assert seen.get("keep_title") == "Yalan (Canlı)"
+        assert job.library.custom_title_for(track.id) == "Yalan (Canlı)"
+
+    def test_an_untouched_track_keeps_the_spotify_title(
+        self, make_job, playlist, stub_download, monkeypatch
+    ):
+        seen = self._capture(monkeypatch)
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=95.0)])
+        pl = playlist(1)
+        job = make_job(pl)
+        job._process(job.tasks[pl.tracks[0].id])
+        assert seen.get("keep_title") == ""
+        assert job.library.custom_title_for(pl.tracks[0].id) == ""
+
+    def test_the_file_wins_over_a_stale_stored_edit(
+        self, make_job, playlist, stub_download, monkeypatch
+    ):
+        """An edit made after the playlist was loaded is newer than anything
+        recorded, so the file has to be read rather than trusted blindly."""
+        seen = self._capture(monkeypatch)
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=95.0)])
+        monkeypatch.setattr("libber.jobs.edited_title",
+                            lambda *a, **k: "Yalan (Live 2011)")
+        pl = playlist(1)
+        track = pl.tracks[0]
+        job = make_job(pl, audio_quality="high")   # a floor the file misses
+        job.upgrade = True
+        job.folder.mkdir(parents=True, exist_ok=True)
+        path = target_path(job.folder, track)
+        path.write_bytes(b"old audio")
+        job.library.record(track, path, "vid", "t", "a", 100.0, bitrate=130,
+                           custom_title="Yalan (Canlı)")
+
+        job._process(job.tasks[track.id])
+        assert seen.get("keep_title") == "Yalan (Live 2011)"
+        assert job.library.custom_title_for(track.id) == "Yalan (Live 2011)"
+
+    def test_a_title_put_back_by_hand_is_not_resurrected(
+        self, make_job, playlist, stub_download, monkeypatch
+    ):
+        seen = self._capture(monkeypatch)
+        monkeypatch.setattr("libber.matcher.search", lambda t: [candidate(score=95.0)])
+        monkeypatch.setattr("libber.jobs.edited_title", lambda *a, **k: "")
+        pl = playlist(1)
+        track = pl.tracks[0]
+        job = make_job(pl, audio_quality="high")
+        job.upgrade = True
+        job.folder.mkdir(parents=True, exist_ok=True)
+        path = target_path(job.folder, track)
+        path.write_bytes(b"old audio")
+        job.library.record(track, path, "vid", "t", "a", 100.0, bitrate=130,
+                           custom_title="Yalan (Canlı)")
+
+        job._process(job.tasks[track.id])
+        assert seen.get("keep_title") == ""
+        assert job.library.custom_title_for(track.id) == ""

@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from mutagen.oggopus import OggOpus
 
-from libber.download import _tidy_error, write_tags
+from libber.download import _tidy_error, edited_title, write_tags
 from libber.youtube import _tidy
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
@@ -78,6 +78,66 @@ class TestWriteTags:
         bogus = tmp_path / "not-audio.opus"
         bogus.write_bytes(b"definitely not an ogg stream")
         write_tags(bogus, track(), "")      # must not raise
+
+
+class TestHandEditedTitles:
+    """Two releases of one song carry the same title, so the only way to tell
+    them apart in a flat song list is to edit the tag -- "Yalan (Canlı)".
+    Re-downloading used to write the Spotify title straight back over it."""
+
+    def test_spots_an_edited_title(self, opus_file, track):
+        write_tags(opus_file, track(title="Yalan"), "")
+        audio = OggOpus(opus_file)
+        audio["title"] = ["Yalan (Canlı)"]
+        audio.save()
+        assert edited_title(opus_file, "Yalan") == "Yalan (Canlı)"
+
+    def test_untouched_title_is_not_an_edit(self, opus_file, track):
+        write_tags(opus_file, track(title="Yalan"), "")
+        assert edited_title(opus_file, "Yalan") == ""
+
+    def test_unreadable_file_reports_no_edit(self, tmp_path):
+        bogus = tmp_path / "not-audio.opus"
+        bogus.write_bytes(b"definitely not an ogg stream")
+        assert edited_title(bogus, "Yalan") == ""
+
+    def test_untagged_file_reports_no_edit(self, opus_file):
+        assert edited_title(opus_file, "Yalan") == ""
+
+    def test_a_file_owned_by_another_release_is_not_read(self, opus_file, track):
+        """Two releases often share one file; its title belongs to whichever
+        one fetched it, not to whoever is downloading now."""
+        t = track(title="Yalan", url="https://open.spotify.com/track/x")
+        write_tags(opus_file, t, "", keep_title="Yalan (Canlı)")
+        assert edited_title(opus_file, "Yalan", "some-other-track") == ""
+        assert edited_title(opus_file, "Yalan", t.id) == "Yalan (Canlı)"
+
+    def test_a_file_with_no_owner_tag_is_still_read(self, opus_file, track):
+        """Files written before ids were embedded still belong to their track."""
+        write_tags(opus_file, track(title="Yalan"), "")   # no url -> no spotifyid
+        audio = OggOpus(opus_file)
+        audio["title"] = ["Yalan (Canlı)"]
+        audio.save()
+        assert edited_title(opus_file, "Yalan", "any-id") == "Yalan (Canlı)"
+
+    def test_keep_title_survives_a_rewrite(self, opus_file, track):
+        """The regression: an upgrade to a better stream overwrites the file,
+        then re-tags it from Spotify."""
+        write_tags(opus_file, track(title="Yalan"), "", keep_title="Yalan (Canlı)")
+        assert OggOpus(opus_file)["title"] == ["Yalan (Canlı)"]
+
+    def test_keep_title_does_not_disturb_other_fields(self, opus_file, track):
+        t = track(title="Yalan", album="Canlı", isrc="TRAET1900317",
+                  url="https://open.spotify.com/track/x")
+        write_tags(opus_file, t, "", keep_title="Yalan (Canlı)")
+        audio = OggOpus(opus_file)
+        assert audio["album"] == ["Canlı"]
+        assert audio["isrc"] == ["TRAET1900317"]
+        assert audio["spotifyid"] == [t.id]
+
+    def test_no_keep_title_writes_the_spotify_one(self, opus_file, track):
+        write_tags(opus_file, track(title="Yalan"), "", keep_title="")
+        assert OggOpus(opus_file)["title"] == ["Yalan"]
 
 
 class TestErrorMessages:

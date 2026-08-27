@@ -16,6 +16,8 @@ from libber.models import Playlist
 
 # Maps a stub file to the Spotify id its "tags" would carry.
 _FAKE_TAGS: dict = {}
+# Same idea, but a whole tag set -- used where the title matters too.
+_FAKE_TAGSETS: dict = {}
 
 
 @pytest.fixture
@@ -328,7 +330,195 @@ class TestReviewQueue:
         assert Library(tmp_path).reviews() == {}
 
 
+class TestAbsorbEdits:
+    """An edit is recognised by the one thing an edited and an untouched file
+    differ in: the title no longer matches the Spotify one. That comparison
+    needs nothing stored in advance, so an edit made at any point is caught on
+    the next load."""
+
+    @pytest.fixture(autouse=True)
+    def _fake_reader(self, monkeypatch):
+        _FAKE_TAGSETS.clear()
+
+        class FakeOpus(dict):
+            def __init__(self, path):
+                found = _FAKE_TAGSETS.get(Path(path).resolve())
+                if found is None:
+                    raise ValueError("not an ogg file")
+                super().__init__({k: [v] for k, v in found.items() if v})
+
+        monkeypatch.setattr("mutagen.oggopus.OggOpus", FakeOpus)
+
+    def _on_disk(self, library, track, folder, title=None, owner=None):
+        path = put(library, track, folder)
+        _FAKE_TAGSETS[path.resolve()] = {
+            "title": track.title if title is None else title,
+            "spotifyid": track.id if owner is None else owner,
+        }
+        return path
+
+    def test_untouched_title_records_nothing(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        self._on_disk(library, pl.tracks[0], tmp_path)
+        assert library.absorb_edits(pl.tracks) == 0
+        assert library.custom_title_for(pl.tracks[0].id) == ""
+
+    def test_edited_title_is_picked_up(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        t = pl.tracks[0]
+        self._on_disk(library, t, tmp_path, title=f"{t.title} (Canlı)")
+        assert library.absorb_edits(pl.tracks) == 1
+        assert library.custom_title_for(t.id) == f"{t.title} (Canlı)"
+
+    def test_a_second_pass_is_a_no_op(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        t = pl.tracks[0]
+        self._on_disk(library, t, tmp_path, title=f"{t.title} (Canlı)")
+        library.absorb_edits(pl.tracks)
+        assert library.absorb_edits(pl.tracks) == 0
+
+    def test_reverting_the_title_clears_the_record(self, library, playlist, tmp_path):
+        """The file stays the authority; the state file follows it."""
+        pl = playlist(1)
+        t = pl.tracks[0]
+        path = self._on_disk(library, t, tmp_path, title=f"{t.title} (Canlı)")
+        library.absorb_edits(pl.tracks)
+        _FAKE_TAGSETS[path.resolve()]["title"] = t.title
+        assert library.absorb_edits(pl.tracks) == 1
+        assert library.custom_title_for(t.id) == ""
+
+    def test_a_file_owned_by_another_release_is_left_alone(
+        self, library, playlist, tmp_path
+    ):
+        """Two releases often share one file, and its tags belong to whichever
+        one fetched it -- reading them as this track's edit would be wrong."""
+        pl = playlist(1)
+        t = pl.tracks[0]
+        self._on_disk(library, t, tmp_path, title="Something Else",
+                      owner="a-different-spotify-id")
+        assert library.absorb_edits(pl.tracks) == 0
+        assert library.custom_title_for(t.id) == ""
+
+    def test_an_untagged_file_is_still_read(self, library, playlist, tmp_path):
+        """Files from before ids were tagged still belong to their track."""
+        pl = playlist(1)
+        t = pl.tracks[0]
+        self._on_disk(library, t, tmp_path, title=f"{t.title} (Canlı)", owner="")
+        assert library.absorb_edits(pl.tracks) == 1
+
+    def test_unreadable_file_is_skipped(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        put(library, pl.tracks[0], tmp_path)        # no tags registered
+        assert library.absorb_edits(pl.tracks) == 0
+
+    def test_tracks_that_were_never_downloaded_are_skipped(self, library, playlist):
+        assert library.absorb_edits(playlist(3).tracks) == 0
+
+    def test_empty_title_tag_is_not_an_edit(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        self._on_disk(library, pl.tracks[0], tmp_path, title="")
+        assert library.absorb_edits(pl.tracks) == 0
+
+    def test_what_it_finds_is_persisted(self, library, playlist, tmp_path):
+        pl = playlist(1)
+        t = pl.tracks[0]
+        self._on_disk(library, t, tmp_path, title=f"{t.title} (Canlı)")
+        library.absorb_edits(pl.tracks)
+        assert Library(library.root).custom_title_for(t.id) == f"{t.title} (Canlı)"
+
+
+class TestCustomTitles:
+    """A hand-edited title is the only thing separating two releases of one
+    song in a flat song list, so it has to outlive a re-sync."""
+
+    def test_absent_by_default(self, library, track, tmp_path):
+        t = track()
+        put(library, t, tmp_path)
+        assert library.custom_title_for(t.id) == ""
+
+    def test_unknown_track_is_blank_not_an_error(self, library):
+        assert library.custom_title_for("nope") == ""
+
+    def test_recorded_and_read_back(self, library, track, tmp_path):
+        t = track(title="Yalan")
+        path = target_path(tmp_path, t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fake opus")
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title="Yalan (Canlı)")
+        assert library.custom_title_for(t.id) == "Yalan (Canlı)"
+
+    def test_survives_a_re_record_that_carries_none(self, library, track, tmp_path):
+        """Re-syncing a playlist records the track again; that must not wipe an
+        edit made earlier."""
+        t = track(title="Yalan")
+        path = target_path(tmp_path, t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fake opus")
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title="Yalan (Canlı)")
+        library.record(t, path, "vid2", t.title, t.artist, 100.0)
+        assert library.custom_title_for(t.id) == "Yalan (Canlı)"
+
+    def test_a_download_can_clear_it(self, library, track, tmp_path):
+        """A download writes an exact title into the file, so "" means the file
+        no longer carries an edit -- a title put back by hand must not be
+        undone by the stored one."""
+        t = track(title="Yalan")
+        path = target_path(tmp_path, t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fake opus")
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title="Yalan (Canlı)")
+        library.record(t, path, "vid", t.title, t.artist, 100.0, custom_title="")
+        assert library.custom_title_for(t.id) == ""
+
+    def test_remembered_after_the_file_is_deleted(self, library, track, tmp_path):
+        """Deleting a file and re-syncing is exactly when the edit must come
+        back, and entry() hides records whose file has gone."""
+        t = track(title="Yalan")
+        path = target_path(tmp_path, t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fake opus")
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title="Yalan (Canlı)")
+        path.unlink()
+        assert library.entry(t.id) is None
+        assert library.custom_title_for(t.id) == "Yalan (Canlı)"
+
+    def test_survives_a_save_and_reload(self, library, track, tmp_path):
+        t = track(title="Yalan")
+        path = target_path(tmp_path, t)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"fake opus")
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title="Yalan (Canlı)")
+        library.save()
+        assert Library(library.root).custom_title_for(t.id) == "Yalan (Canlı)"
+
+    def test_entries_written_before_the_field_existed_still_load(
+        self, library, track, tmp_path
+    ):
+        t = track()
+        put(library, t, tmp_path)
+        library._data["tracks"][t.id].pop("custom_title")
+        library.save()
+        reloaded = Library(library.root)
+        assert reloaded.entry(t.id) is not None      # no TypeError on Entry(**raw)
+        assert reloaded.custom_title_for(t.id) == ""
+
+
 class TestM3U:
+    def test_edited_title_is_shown_in_the_playlist(self, library, playlist):
+        pl = playlist(1)
+        t = pl.tracks[0]
+        folder = folder_for(library.root, pl)
+        path = put(library, t, folder)
+        library.record(t, path, "vid", t.title, t.artist, 100.0,
+                       custom_title=f"{t.title} (Canlı)")
+        content = write_m3u(folder, pl, library).read_text(encoding="utf-8")
+        assert f"{t.artist} - {t.title} (Canlı)" in content
+
     def test_written_in_playlist_order_with_relative_paths(self, library, playlist):
         pl = playlist(3)
         folder = folder_for(library.root, pl)

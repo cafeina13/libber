@@ -17,7 +17,13 @@ from typing import Any, Iterable
 
 from . import enrich, matcher
 from .config import Settings, audio_format, cookie_option, min_bitrate
-from .download import DownloadFailed, fetch_audio, target_path, write_tags
+from .download import (
+    DownloadFailed,
+    edited_title,
+    fetch_audio,
+    target_path,
+    write_tags,
+)
 from .library import Library, folder_for, write_m3u
 from .matcher import Candidate
 from .spotify import Playlist, Track
@@ -407,6 +413,18 @@ class Job:
                 or (self.library.root / upgrade[1].file if upgrade else None)
                 or self._reserve_path(task)
             )
+            # The file is the authority whenever there is one -- it carries any
+            # edit made since the playlist was loaded, and equally shows a title
+            # put back by hand, which the stored value would otherwise undo.
+            # Read it before the download, which replaces the file it lives in.
+            # The store is what is left once the file is gone.
+            if destination.exists():
+                keep_title = edited_title(
+                    destination, task.track.title, task.track.id
+                )
+            else:
+                keep_title = self.library.custom_title_for(task.track.id)
+
             try:
                 result = fetch_audio(
                     candidate,
@@ -425,7 +443,7 @@ class Job:
                 last_error = str(exc)
                 continue
 
-            write_tags(result.path, task.track, candidate.url)
+            write_tags(result.path, task.track, candidate.url, keep_title=keep_title)
             superseded = upgrade[1].file if upgrade else (
                 task.replace_path.relative_to(self.library.root).as_posix()
                 if task.replace_path else None
@@ -441,6 +459,7 @@ class Job:
                 artist=", ".join(candidate.artists),
                 score=candidate.score,
                 bitrate=result.bitrate,
+                custom_title=keep_title,
             )
             task.status = DONE
             task.progress = 1.0

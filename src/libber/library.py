@@ -13,6 +13,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
 from .download import safe_name
@@ -36,6 +37,7 @@ class Entry:
     score: float
     at: str
     bitrate: int = 0        # kbps; 0 when unknown, filled in on first read
+    custom_title: str = ""  # a title edited by hand, kept across re-downloads
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -83,6 +85,16 @@ class Library:
     def path_for(self, track_id: str) -> Path | None:
         found = self.entry(track_id)
         return self.root / found.file if found else None
+
+    def custom_title_for(self, track_id: str) -> str:
+        """A hand-edited title, remembered even once the file itself is gone.
+
+        Deliberately not routed through entry(), which hides records whose file
+        has vanished: deleting a file and re-syncing is exactly the case where
+        the edit needs restoring.
+        """
+        raw = self._data["tracks"].get(track_id) or {}
+        return raw.get("custom_title") or ""
 
     def known_ids(self) -> set[str]:
         return {tid for tid in self._data["tracks"] if self.entry(tid)}
@@ -185,6 +197,45 @@ class Library:
             self.save()
         return {"repaired": repaired, "still_missing": len(missing)}
 
+    def absorb_edits(self, tracks: Iterable[Track]) -> int:
+        """Remember titles that have been edited by hand.
+
+        libber writes the Spotify title into every file it tags, so file and
+        record agreeing is the normal state -- anything else was typed by the
+        owner, and is the only thing separating two releases of one song in a
+        flat song list. Reading it whenever a playlist loads catches an edit
+        while the file is still there; waiting until a re-download means
+        noticing after the file it lived in has already been replaced.
+
+        Reverting a title by hand clears the record again, so the file stays
+        the authority rather than the state file.
+        """
+        from mutagen.oggopus import OggOpus
+
+        changed = 0
+        with self._lock:
+            for track in tracks:
+                raw = self._data["tracks"].get(track.id)
+                if not raw:
+                    continue
+                try:
+                    tags = OggOpus(self.root / raw["file"])
+                except Exception:
+                    continue        # gone or unreadable: nothing to learn here
+                # One file is often shared by two releases; its tags belong to
+                # whichever one fetched it, so only that release reads them.
+                owner = (tags.get("spotifyid") or [""])[0]
+                if owner and owner != track.id:
+                    continue
+                current = (tags.get("title") or [""])[0]
+                edited = current if current and current != track.title else ""
+                if raw.get("custom_title", "") != edited:
+                    raw["custom_title"] = edited
+                    changed += 1
+        if changed:
+            self.save()
+        return changed
+
     # -- review queue ----------------------------------------------------
     # Tracks the matcher wouldn't guess at. Kept on disk because the queue is
     # the whole point of a confidence threshold: without this, closing the page
@@ -252,7 +303,7 @@ class Library:
 
     def record(
         self, track: Track, path: Path, video_id: str, title: str, artist: str,
-        score: float, bitrate: int = 0
+        score: float, bitrate: int = 0, custom_title: str | None = None
     ) -> None:
         with self._lock:
             self._data["tracks"][track.id] = Entry(
@@ -263,6 +314,12 @@ class Library:
                 score=round(score, 1),
                 at=_now(),
                 bitrate=int(bitrate or 0),
+                # None means "no opinion": pointing a second release at a file
+                # that already exists must not drop the edit recorded for it.
+                # A string is authoritative, "" included -- a download has just
+                # written that exact title into the file.
+                custom_title=(self.custom_title_for(track.id)
+                              if custom_title is None else custom_title),
             ).to_dict()
             # A downloaded track is no longer awaiting a decision, however it
             # got there -- matched, reused, or a link pasted by hand.
@@ -331,7 +388,10 @@ def write_m3u(folder: Path, playlist: Playlist, library: Library) -> Path | None
             rel = path.relative_to(folder)
         except ValueError:
             rel = Path("..") / path.relative_to(library.root)
-        lines.append(f"#EXTINF:{round(track.duration_s)},{track.artist} - {track.title}")
+        # A hand-edited title is the only thing telling two releases of one
+        # song apart, so the playlist should show it too.
+        shown = library.custom_title_for(track.id) or track.title
+        lines.append(f"#EXTINF:{round(track.duration_s)},{track.artist} - {shown}")
         lines.append(str(rel).replace("\\", "/"))
         written += 1
 

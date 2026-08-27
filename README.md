@@ -338,6 +338,33 @@ to you.
 Deleting a file is safe: the entry stops resolving, so the track simply reads
 as not downloaded and comes back on the next run if you want it.
 
+### Telling two versions apart
+
+Renaming the file does nothing for this — players read the title and artist
+from the tags inside the file, so both halves of a pair still show the same
+name. What separates them is the title tag itself:
+
+```
+Yalan            Duman 1, 2010, 267.3s
+Yalan (Canlı)    Canlı,   2011, 266.8s
+```
+
+Edit it with a tag editor that writes to the file (foobar2000, MusicBee,
+Mp3tag). Many phone players change only their own database, so the edit
+disappears the moment the library is rescanned or copied elsewhere.
+
+libber keeps an edited title rather than overwriting it, and needs nothing
+switched on to do so. Every file it tags gets the Spotify title, so file and
+record agreeing is the normal state — a title that no longer matches was typed
+by you. Loading a playlist compares the two and records anything edited, while
+the file is still there to be read.
+
+From then on the edit is carried across instead of being overwritten: by an
+upgrade to a better stream, and by a re-fetch after you deleted the file, since
+the record outlives the file itself. Generated `.m3u8` files show the edited
+title too. Change the title back by hand and the record clears — the file stays
+the authority, not the state file.
+
 ### Checking your own library
 
 Nothing special is needed. Every downloaded file carries the Spotify title,

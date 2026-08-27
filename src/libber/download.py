@@ -207,7 +207,30 @@ def _cover_bytes(url: str) -> bytes | None:
     return data
 
 
-def write_tags(path: Path, track: Track, source_url: str = "") -> None:
+def edited_title(path: Path, expected: str, track_id: str = "") -> str:
+    """The file's title if someone has changed it by hand, otherwise "".
+
+    Two releases of one song share a title, so the only way to tell them apart
+    in a flat song list is to edit the title tag -- "Yalan (Canlı)". Edits are
+    normally picked up when a playlist loads; this covers the gap where one is
+    made after that and would otherwise be overwritten by the download.
+    """
+    try:
+        tags = OggOpus(path)
+    except Exception:
+        return ""
+    # One file is often shared by two releases, and its tags belong to whichever
+    # one fetched it -- only that release reads them as its own edit.
+    owner = (tags.get("spotifyid") or [""])[0]
+    if track_id and owner and owner != track_id:
+        return ""
+    current = (tags.get("title") or [""])[0]
+    return current if current and current != expected else ""
+
+
+def write_tags(
+    path: Path, track: Track, source_url: str = "", keep_title: str = ""
+) -> None:
     """Vorbis comments + embedded artwork, the way Opus-in-Ogg expects."""
     try:
         audio = OggOpus(path)
@@ -215,7 +238,7 @@ def write_tags(path: Path, track: Track, source_url: str = "") -> None:
         return  # not fatal; the audio is on disk and playable either way
 
     tags = {
-        "title": track.title,
+        "title": keep_title or track.title,
         "artist": track.artists or [""],
         "albumartist": track.album_artist or (track.artists[0] if track.artists else ""),
         "album": track.album,
