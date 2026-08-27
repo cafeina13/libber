@@ -216,8 +216,11 @@ Then the penalties, which are what actually catch bad matches:
   excerpt, a full-album upload, or an extended mix, not the track.
 - **A different title** — the title is the only signal that says *which* song
   this is. Artist and duration agree for every other track on the same album,
-  so a same-script title that doesn't match is held no matter how well
-  everything else scores.
+  so a same-script title that doesn't clearly match is held no matter how well
+  everything else scores. The bar is set high on purpose: across 1449 real
+  downloads, 1428 scored exactly 100 on title, because remaster and `feat.`
+  noise is stripped before comparing. Holding a good match costs one click in
+  the picker; letting a bad one through leaves the wrong song in the library.
 
 Artists written in **different scripts are not compared at all**. Spotify
 romanises names that YouTube Music leaves in their own script, so `Yousei

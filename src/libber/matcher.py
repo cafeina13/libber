@@ -178,10 +178,24 @@ class Candidate:
         }
 
 
+# How much each signal is worth. The title carries the most because it is the
+# only one that says *which song* this is -- artist and duration agree for every
+# other track on the same album.
+W_TITLE = 0.42
+W_ARTIST = 0.33
+W_DURATION = 0.25
+
 # Below this, two same-script titles are different songs, whatever else agrees.
 # Genuine matches clear it easily: remaster and "(feat. …)" noise is stripped
-# before comparing, so real pairs land at or near 100.
-TITLE_FLOOR = 60.0
+# before comparing, so real pairs land at or near 100 -- measured across 1449
+# real downloads, 1428 scored exactly 100 and only 3 fell between 80 and 99.
+#
+# Set high deliberately, because the two failure modes are not equal. Holding a
+# good match costs one click in the review picker; letting a bad one through
+# puts the wrong song in the library indefinitely. "Danza Kuduro" against "Vem
+# Dançar Kuduro" -- the Portuguese original, sharing an artist and a word --
+# scored 75.9 and reached 89.9 overall.
+TITLE_FLOOR = 80.0
 
 
 def _duration_score(delta: float) -> float:
@@ -219,7 +233,7 @@ def score(track: Track, cand: Candidate) -> Candidate:
     delta = cand.duration_s - track.duration_s
     dur_score = _duration_score(delta) if cand.duration_s else 50.0
 
-    total = 0.42 * title_score + 0.33 * artist_score + 0.25 * dur_score
+    total = W_TITLE * title_score + W_ARTIST * artist_score + W_DURATION * dur_score
 
     flags: list[str] = []
     # Variant words the source track doesn't have -> almost certainly wrong take.

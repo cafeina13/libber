@@ -174,6 +174,34 @@ class TestTitleFloor:
         assert "different title" in result.flags
         assert result.score < 70
 
+    def test_a_related_song_sharing_a_word_and_an_artist(self, track):
+        """"Danza Kuduro" against "Vem Dançar Kuduro" -- the Portuguese
+        original. A shared word, a shared artist and an identical length put it
+        at 89.9, under the default threshold only by luck."""
+        t = track(title="Danza Kuduro", artists=["Don Omar", "Lucenzo"],
+                  duration_ms=199_000)
+        result = score(t, cand("Vem Dancar Kuduro", ["Lucenzo"], 199))
+        assert result.risky
+        assert "different title" in result.flags
+
+    @pytest.mark.parametrize(
+        "wanted, got",
+        [
+            ("Chokehold", "Chokehold"),
+            ("Teardrop", "Teardrop (feat. Elizabeth Fraser)"),
+            ("Bohemian Rhapsody", "Bohemian Rhapsody - 2011 Remaster"),
+            ("Monsters", "Monsters"),
+            ("空想メソロギヰ", "空想メソロギヰ"),
+        ],
+    )
+    def test_the_higher_floor_leaves_real_matches_alone(self, track, wanted, got):
+        """Measured across 1449 real downloads: 1428 scored exactly 100 on
+        title, because remaster and feat. noise is stripped before comparing.
+        The floor sits in a band real matches essentially never occupy."""
+        t = track(title=wanted, artists=["Artist"], duration_ms=200_000)
+        result = score(t, cand(got, ["Artist"], 200))
+        assert "different title" not in result.flags
+
     @pytest.mark.parametrize(
         "wanted, got",
         [
