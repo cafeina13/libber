@@ -297,6 +297,47 @@ Artist and duration agree for every other track on the same album, and together
 they were worth 58 of the 100 points. Only the title says *which* song it is.
 All three are held for review now whatever the threshold is set to.
 
+### Why you sometimes get two of a song
+
+A recording is downloaded once and shared, so a track appearing in five
+playlists is one file. But a *song* can arrive as two different Spotify
+releases — the album, a single, a compilation, a remaster — each with its own
+id, and each may match a different YouTube upload. Nothing then tells libber
+they are the same music, so both are fetched, and you get a pair.
+
+Where you notice it depends on the layout. Two playlists in their own folders
+each hold a copy and nothing collides, so the pair is invisible. Two releases
+inside *one* playlist land in the same folder and the second takes a `(2)`
+suffix. Flattening a library into a single folder makes every pair collide at
+once — it doesn't create them, it reveals the ones the folders were hiding.
+
+**There is no reliable automatic fix.** The obvious candidate is the ISRC,
+which identifies a recording and is already stored in every file's tags. It is
+assigned per *release* though, so a re-issue of the same master gets a new one.
+Measured across 13 real pairs, only 4 shared an ISRC — and two of the ones that
+differed were byte-identical audio:
+
+```
+Madonna — La Isla Bonita   USWB19903355 / USWB10903618   both 242.7s
+Nilüfer — Değişir Dünya    FR6V82185606 / TR0011300032   both 265.9s
+```
+
+Matching on title, artist and length instead would catch more, at the cost of
+occasionally merging two recordings that genuinely differ — which is a worse
+failure than keeping a spare copy. So libber keeps both and leaves the choice
+to you.
+
+**Deciding which to keep** takes two checks, in this order:
+
+1. **Compare the lengths.** More than a couple of seconds apart and they are
+   different recordings — a live take, a single edit, a longer album cut. Keep
+   both, or keep the one you want.
+2. **If the lengths match, compare the bitrates.** Same recording, downloaded
+   twice; keep the higher and delete the other.
+
+Deleting a file is safe: the entry stops resolving, so the track simply reads
+as not downloaded and comes back on the next run if you want it.
+
 ### Checking your own library
 
 Nothing special is needed. Every downloaded file carries the Spotify title,
