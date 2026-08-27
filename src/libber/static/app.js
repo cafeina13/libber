@@ -178,6 +178,43 @@ async function loadFrom(which) {
   }
 }
 
+// Which statuses each chip shows. "new" is anything not yet on disk, which is
+// the set the download button would act on.
+const FILTERS = {
+  all: null,
+  new: (st) => !["exists", "below", "done"].includes(st),
+  needs_review: (st) => st === "needs_review",
+  error: (st) => st === "error",
+  below: (st) => st === "below",
+  have: (st) => ["exists", "below", "done"].includes(st),
+};
+let activeFilter = "all";
+
+function applyFilter() {
+  const text = $("filter-text").value.trim().toLowerCase();
+  const wanted = FILTERS[activeFilter];
+  let shown = 0;
+  const present = new Set();          // gathered in the same pass, not per chip
+  rows.forEach((row) => {
+    const status = row.dataset.status;
+    present.add(status);
+    const byStatus = !wanted || wanted(status);
+    const byText = !text || (row.dataset.search || "").includes(text);
+    const visible = byStatus && byText;
+    row.classList.toggle("nomatch", !visible);
+    if (visible) shown += 1;
+  });
+  const total = rows.size;
+  $("filter-count").textContent =
+    shown === total ? `${total} tracks` : `${shown} of ${total}`;
+
+  // Hide chips that would show nothing, so the bar reflects this playlist.
+  document.querySelectorAll(".chip").forEach((chip) => {
+    const test = FILTERS[chip.dataset.show];
+    chip.hidden = Boolean(test) && ![...present].some(test);
+  });
+}
+
 function renderPlaylist(data) {
   playlist = data;
   rows.clear();
@@ -259,11 +296,15 @@ function renderPlaylist(data) {
 
   $("playlist").classList.remove("hidden");
   banner($("job-banner"), "");
+  applyFilter();
   updateDownloadButton();
 }
 
 function selectTracks(mode) {
   rows.forEach((row) => {
+    // While filtered, act on what is on screen -- selecting 600 hidden tracks
+    // from a view showing 8 is never what was meant.
+    if (row.classList.contains("nomatch") && mode !== "none") return;
     const box = row.querySelector(".tsel");
     if (mode === "all") box.checked = true;
     else if (mode === "none") box.checked = false;
@@ -381,6 +422,8 @@ function applyTask(task) {
 
   // Offered even with no candidates: a track search couldn't place at all is
   // exactly the one that needs a link pasted by hand.
+  applyFilter();   // a row may have just moved in or out of the current view
+
   const fix = row.querySelector(".tfix");
   const fixable = ["needs_review", "done", "error"].includes(task.status);
   fix.classList.toggle("hidden", !fixable);
@@ -566,6 +609,15 @@ $("cancel-btn").onclick = async () => {
     banner($("job-banner"), err.message, "error");
   }
 };
+
+$("filter-text").addEventListener("input", applyFilter);
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.onclick = () => {
+    activeFilter = chip.dataset.show;
+    document.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === chip));
+    applyFilter();
+  };
+});
 
 document.querySelectorAll("[data-select]").forEach((btn) => {
   btn.onclick = () => selectTracks(btn.dataset.select);

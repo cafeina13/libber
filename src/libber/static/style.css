@@ -169,6 +169,26 @@ code {
 .pl-actions { display: grid; gap: 8px; justify-items: end; }
 .selectors { display: flex; gap: 6px; }
 
+/* ---------- filter ---------- */
+.trackfilter {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 2px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+}
+.trackfilter input {
+  flex: 1 1 220px; margin-top: 0; padding: 7px 10px; font-size: 13px;
+}
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip {
+  padding: 4px 10px; font-size: 12px; border-radius: 20px;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+}
+.chip:hover { color: var(--text); }
+.chip.on { background: #10291a; color: var(--accent); border-color: #1c4b30; }
+.chip[hidden] { display: none; }
+#filter-count { margin-left: auto; white-space: nowrap; }
+.track.nomatch { display: none; }
+
 /* ---------- track rows ---------- */
 .tracks { display: grid; gap: 6px; }
 .track {

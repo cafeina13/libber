@@ -24,6 +24,10 @@ codebase is about.
   duration, then penalised for words that imply a *different recording* — live,
   remix, cover, karaoke, sped-up, extended. Anything suspicious is held for
   review instead of silently downloading the wrong take.
+- **Filtering.** A 600-track playlist can't be checked by scrolling, so the list
+  filters by text and by state — *New*, *Needs review*, *Failed*, *Below
+  quality*, *Downloaded*. Chips that would show nothing hide themselves, and
+  while a filter is active the select buttons act only on what's on screen.
 - **Fix-match picker.** Anything held for review shows the ranked alternatives
   with a preview link; pick one and it re-downloads. When none of them is the
   recording — or search found nothing at all — paste the YouTube link yourself

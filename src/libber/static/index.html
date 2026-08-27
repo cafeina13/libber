@@ -143,6 +143,21 @@
     </div>
 
     <div id="job-banner" class="banner hidden"></div>
+
+    <div id="track-filter" class="trackfilter">
+      <input id="filter-text" type="text" spellcheck="false"
+             placeholder="Filter by title or artist…">
+      <div class="chips">
+        <button class="chip on" data-show="all">All</button>
+        <button class="chip" data-show="new">New</button>
+        <button class="chip" data-show="needs_review">Needs review</button>
+        <button class="chip" data-show="error">Failed</button>
+        <button class="chip" data-show="below">Below quality</button>
+        <button class="chip" data-show="have">Downloaded</button>
+      </div>
+      <span id="filter-count" class="muted small"></span>
+    </div>
+
     <div id="tracks" class="tracks"></div>
   </section>
 
