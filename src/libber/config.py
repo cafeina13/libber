@@ -46,8 +46,13 @@ class Settings:
     output_dir: Path = field(default_factory=lambda: DEFAULT_OUTPUT)
     concurrency: int = 3
     # Below this score a match is surfaced as "needs review" instead of being
-    # downloaded silently. Tuned against live/remix/karaoke false positives.
-    match_threshold: float = 70.0
+    # downloaded silently. The risky flag now holds anything that looks like the
+    # wrong *song* whatever this is set to, so what remains here is the wrong
+    # *cut* -- a live take or single edit of the right track. Measured against
+    # every questionable match a real library produced, 80 catches one more of
+    # those than 70 while holding nothing extra; 85 starts holding correct
+    # matches whose artist is written in another script.
+    match_threshold: float = 80.0
     skip_low_matches: bool = True
     # YouTube gives no album, date or ISRC and only 16:9 artwork. Look the
     # recording up on Spotify (or YouTube Music) to fill those in.

@@ -231,8 +231,17 @@ title and duration decide. Covers by a genuinely different artist in the same
 script are still caught.
 
 Anything tripping those is marked *risky* and parked for review no matter how
-well it scored otherwise. Tracks scoring below the confidence threshold (70 by
-default, adjustable in Settings) are parked too. Everything else downloads,
+well it scored otherwise. Tracks scoring below the confidence threshold (80 by
+default, adjustable in Settings) are parked too.
+
+The threshold and the *risky* flag do different jobs, and the flag does the
+heavier one. Every wrong match this project has found is risky and held
+whatever the threshold says, so the number is not what stands between you and
+the wrong song — it governs the wrong *cut*, a live take or single edit of the
+right track. 80 rather than 70 because, measured across every questionable
+match a real library produced, it catches one more of those and holds nothing
+extra. 85 would catch the rest but starts holding correct matches whose artist
+is written in another script. Everything else downloads,
 walking down the ranked list if the top pick turns out to be unavailable.
 
 ## How well it actually works

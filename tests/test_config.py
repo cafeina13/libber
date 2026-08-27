@@ -42,7 +42,7 @@ class TestDefaults:
         s = load_settings()
         assert s.output_dir == isolated / "default-music"
         assert s.concurrency == 3
-        assert s.match_threshold == 70.0
+        assert s.match_threshold == 80.0
         assert s.skip_low_matches is True
         assert s.enrich_youtube is True
 
