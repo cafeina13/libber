@@ -119,6 +119,45 @@ class TestAlbumEditionsAreNotVariants:
         assert "extended mix" in result.flags
 
 
+class TestMissingVariantIsWeakEvidence:
+    """"You wanted acoustic and this doesn't say acoustic" proves little.
+
+    Ruelle's "Monsters" comes from the album "Monsters (Acoustic Version)", so
+    the recording wanted is acoustic -- but the YouTube entry for that release
+    is titled just "Monsters", because the whole release is acoustic. It
+    matched to the same second and was docked 10 points for the missing label,
+    while the candidate that did say "(Acoustic Version)" was a different
+    recording 27 seconds longer.
+    """
+
+    def test_an_exact_duration_match_is_not_docked(self, track):
+        t = track(title="Monsters", artists=["Ruelle"],
+                  album="Monsters (Acoustic Version)", duration_ms=201_000)
+        result = score(t, cand("Monsters", ["Ruelle"], 201))
+        assert result.flags == []
+        assert result.score >= 95
+
+    def test_still_flagged_when_the_length_disagrees(self, track):
+        """Without duration backing it up, a missing label is worth noting."""
+        t = track(title="Monsters", artists=["Ruelle"],
+                  album="Monsters (Acoustic Version)", duration_ms=201_000)
+        result = score(t, cand("Monsters", ["Ruelle"], 228))
+        assert any("missing" in f for f in result.flags)
+
+    def test_the_forward_direction_is_untouched(self, track):
+        """A candidate announcing a variant nobody asked for is strong
+        evidence, and must still be caught even at an identical length."""
+        t = track(title="Song", artists=["Artist"], duration_ms=200_000)
+        result = score(t, cand("Song (Live at Wembley)", ["Artist"], 200))
+        assert result.risky
+        assert "live version" in result.flags
+
+    def test_a_studio_track_wanting_live_still_notices_a_length_gap(self, track):
+        t = track(title="Song (Live)", artists=["Artist"], duration_ms=240_000)
+        result = score(t, cand("Song", ["Artist"], 200))
+        assert any("missing" in f for f in result.flags)
+
+
 class TestTitleFloor:
     """A different song by the right artist used to pass.
 

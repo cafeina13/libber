@@ -251,9 +251,18 @@ def score(track: Track, cand: Candidate) -> Candidate:
         flags.append(_LABELS[key])
         risky = True
     # ...and the reverse: we wanted the live cut and got the studio one.
-    for key in src_variants - cand_variants:
-        total -= 10
-        flags.append(f"missing: {_LABELS[key]}")
+    # The reverse direction is far weaker evidence than the forward one. A
+    # candidate announcing "Live" when the source is a studio track is close to
+    # proof it is the wrong take; a candidate merely failing to announce
+    # "acoustic" proves nothing, because a release that is entirely acoustic
+    # titles its tracks plainly. Ruelle's "Monsters" from "Monsters (Acoustic
+    # Version)" matched a candidate titled just "Monsters" -- to the same
+    # second -- and was docked for it. Duration settles that question better
+    # than a label does, so when it agrees exactly, say nothing.
+    if abs(delta) > 2:
+        for key in src_variants - cand_variants:
+            total -= 10
+            flags.append(f"missing: {_LABELS[key]}")
 
     # A different performer is how covers sneak in, and the weighted artist
     # term alone isn't decisive enough -- Pentatonix's "Bohemian Rhapsody"
