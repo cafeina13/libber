@@ -235,6 +235,69 @@ well it scored otherwise. Tracks scoring below the confidence threshold (70 by
 default, adjustable in Settings) are parked too. Everything else downloads,
 walking down the ranked list if the top pick turns out to be unavailable.
 
+## How well it actually works
+
+Measured against a real library of 1449 tracks, not estimated.
+
+**Recorded confidence:**
+
+| Score | Tracks |
+| --- | ---: |
+| 100 | 1398 |
+| 95–99 | 24 |
+| 90–94 | 16 |
+| below 90 | 11 |
+
+**Title similarity** is where matches cluster hardest: 1428 of 1449 scored
+exactly 100, because remaster and `feat.` noise is stripped before comparing.
+Only 3 landed between 80 and 99. That is why the title floor sits at 80 — real
+matches essentially never occupy the band below it.
+
+**Auditing the ones that didn't score 100** — 51 tracks — found exactly **one
+genuinely wrong download**, about 0.07%. What the rest turned out to be:
+
+| | Count | What it means |
+| --- | ---: | --- |
+| Wrong song | 1 | A different track by the right artist. Genuinely wrong. |
+| Deliberate pick | 1 | Chosen by hand in the picker over the matcher's answer. |
+| Different cut | 3 | Right song, length off by 10–38s — a live take, a single edit, a remaster. Worth a listen, not a rewrite. |
+| Different uploader | 3 | Right audio to the second, but the channel isn't the artist — a re-upload, a soundtrack account, a fan channel. Flagged on artist, almost certainly fine. |
+| Different alphabet | 3 | Right download, flagged only because the title or artist appears in two scripts at once — `真夜中のドア〜stay with me - Mayonaka no Door`, `Yousei Teikoku` against `妖精帝國`. False alarms. |
+
+The last two categories are worth recognising rather than fixing. A channel name
+that isn't the artist is normal for soundtracks and re-uploads, and a title
+carrying both its native and romanised form is normal for Japanese releases.
+Both look like mismatches to a string comparison and are usually correct.
+
+### The failure that keeps recurring
+
+Every wrong match found so far has the same shape: **right artist, plausible
+length, wrong song.**
+
+| Wanted | Got | Scored then | Scores now |
+| --- | --- | ---: | ---: |
+| Mary Jane — Seni Yazdım | Mary Jane — Her Şeye Rağmen | 74.8 | **40.9** |
+| Don Omar, Lucenzo — Danza Kuduro | Lucenzo — Vem Dançar Kuduro | 89.9 | **59.9** |
+| Redd — Siktiret Boşver | Redd — Kozmos | 66.8 | **33.4** |
+
+Artist and duration agree for every other track on the same album, and together
+they were worth 58 of the 100 points. Only the title says *which* song it is.
+All three are held for review now whatever the threshold is set to.
+
+### Checking your own library
+
+Nothing special is needed. Every downloaded file carries the Spotify title,
+artist and ISRC in its own tags, while `library.json` records the *candidate*
+title that was actually matched. Comparing those two re-scores every past
+decision without downloading anything, and the score already stored narrows it
+further — a track that scored 100 needs an identical title, artist and length,
+which mostly means it isn't wrong.
+
+Two honest limits. The audit re-scores against the metadata recorded at
+download time, so a bad match whose candidate carried misleading metadata could
+still hide among the high scorers. And this is one library and one taste in
+music; a different catalogue may fail differently.
+
 ## Where things live
 
 | Path | What |
